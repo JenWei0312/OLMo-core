@@ -34,6 +34,24 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+@beta_feature
+@dataclass
+class EngramConfig:
+    """Configuration for the Engram sparse memory module."""
+    max_ngram_size: int = 3
+    n_embed_per_ngram: int = 512
+    n_head_per_ngram: int = 8
+    kernel_size: int = 4
+    
+    # The layers where Engram will be injected (0-indexed)
+    layer_ids: List[int] = field(default_factory=lambda: [1, 14]) # layer 2 and 15
+    
+    # Capacity: [2-gram capacity, 3-gram capacity]
+    engram_vocab_size: List[int] = field(default_factory=lambda: [129280 * 5, 129280 * 5])
+    
+    pad_id: int = 2
+    seed: int = 0
+
 
 class TransformerDataParallelWrappingStrategy(StrEnum):
     """
@@ -54,24 +72,6 @@ class TransformerDataParallelWrappingStrategy(StrEnum):
     """
     Wrap certain modules within each block in addition to wrapping each block (only applies to FSDP).
     """
-
-
-@beta_feature
-class TransformerActivationCheckpointingMode(StrEnum):
-    """
-    An enumeration of the different activation checkpointing modes.
-    """
-
-    full = "full"
-    """Checkpoint every block."""
-    selected_blocks = "selected_blocks"
-    """Checkpoint only selected blocks."""
-    selected_modules = "selected_modules"
-    """Checkpoint only selected modules."""
-    selected_ops = "selected_ops"
-    """Checkpoint only a specific set of operations."""
-    budget = "budget"
-    """Checkpoint based on a budget."""
 
 
 class TransformerType(StrEnum):
@@ -146,6 +146,23 @@ class TransformerBlockType(StrEnum):
     """
 
 
+@beta_feature
+class TransformerActivationCheckpointingMode(StrEnum):
+    """
+    An enumeration of the different activation checkpointing modes.
+    """
+
+    full = "full"
+    """Checkpoint every block."""
+    selected_blocks = "selected_blocks"
+    """Checkpoint only selected blocks."""
+    selected_modules = "selected_modules"
+    """Checkpoint only selected modules."""
+    selected_ops = "selected_ops"
+    """Checkpoint only a specific set of operations."""
+    budget = "budget"
+    """Checkpoint based on a budget."""
+
 @dataclass
 class TransformerBlockConfig(ModuleConfig):
     """
@@ -174,6 +191,9 @@ class TransformerBlockConfig(ModuleConfig):
     """
     The config for the MoE feed-forward layer. Required for MoE blocks.
     """
+    # ---> Config for engram <---
+    engram: Optional[EngramConfig] = None
+
     name: TransformerBlockType = TransformerBlockType.default
     """
     The block type.
@@ -318,6 +338,8 @@ class TransformerConfig(ModelConfig):
     block: TransformerBlockConfig | dict[str, TransformerBlockConfig]
     lm_head: LMHeadConfig
     embedding_norm: Optional[LayerNormConfig] = None
+    # ---> Add Engram config <---
+    engram: Optional[EngramConfig] = None
     name: TransformerType = TransformerType.default
     dtype: DType = DType.float32
     init_method: InitMethod = InitMethod.normal
