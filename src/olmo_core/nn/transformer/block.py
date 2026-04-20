@@ -20,10 +20,12 @@ from ..buffer_cache import BufferCache
 from ..feed_forward import FeedForward, FeedForwardConfig
 from ..functional import l2_normalize
 from ..layer_norm import LayerNormConfig
+from ..engram.config import EngramConfig
 from ..moe import MoEConfig, MoERouter
 from ..moe.parallel_mlp import ParallelMLPBase
 from ..residual_stream import ResidualStream
 from .config import TransformerDataParallelWrappingStrategy
+
 
 if TYPE_CHECKING:
     from olmo_core.train.common import ReduceType
@@ -115,6 +117,7 @@ class TransformerBlock(TransformerBlockBase):
         sequence_mixer: SequenceMixerConfig,
         feed_forward: FeedForwardConfig,
         layer_norm: LayerNormConfig,
+        engram: Optional["EngramConfig"] = None, # 1. Add Engram config -- to be imported later 
         dropout: float = 0.0,
         attention_residual_alpha: float = 1.0,
         feed_forward_residual_alpha: float = 1.0,
@@ -140,15 +143,32 @@ class TransformerBlock(TransformerBlockBase):
         self.feed_forward_residual_stream = ResidualStream(
             alpha=feed_forward_residual_alpha, dropout=dropout
         )
-
+        # 2. Add the Engram Initialization
+        self.engram_module = None
+        if engram is not None and block_idx in engram.layer_ids:
+            # We will create this Engram module in a separate file soon!
+            from ..engram import Engram 
+            self.engram_module = Engram(
+                config=engram, 
+                layer_id=block_idx, 
+                d_model=d_model
+            )
     def forward(
         self,
         x: torch.Tensor,
         *,
         loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
+        input_ids: Optional[torch.Tensor] = None, # <--- ADD THIS for engram input
         **kwargs,
     ) -> torch.Tensor:
         del loss_div_factor
+        # --- NEW ENGRAM INJECTION ---
+        if self.engram_module is not None:
+            if input_ids is None:
+                raise ValueError("Engram requires input_ids to be passed to the block!")
+            # Add Engram's retrieved memory to the hidden states
+            x = x + self.engram_module(hidden_states=x, input_ids=input_ids)
+
         h = self.attention_residual_stream(x, self.attention(self.attention_norm(x), **kwargs))
         return self.feed_forward_residual_stream(h, self.feed_forward(self.feed_forward_norm(h)))
 
