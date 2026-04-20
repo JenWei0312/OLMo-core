@@ -19,6 +19,8 @@ from ..attention import (
     GateConfig,
     SlidingWindowAttentionConfig,
 )
+from ..engram.config import EngramConfig
+
 from ..buffer_cache import BufferCache
 from ..config import ModelConfig, ModuleConfig
 from ..feed_forward import ActivationFunction, FeedForwardConfig, FeedForwardType
@@ -34,23 +36,6 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-@beta_feature
-@dataclass
-class EngramConfig:
-    """Configuration for the Engram sparse memory module."""
-    max_ngram_size: int = 3
-    n_embed_per_ngram: int = 512
-    n_head_per_ngram: int = 8
-    kernel_size: int = 4
-    
-    # The layers where Engram will be injected (0-indexed)
-    layer_ids: List[int] = field(default_factory=lambda: [1, 14]) # layer 2 and 15
-    
-    # Capacity: [2-gram capacity, 3-gram capacity]
-    engram_vocab_size: List[int] = field(default_factory=lambda: [129280 * 5, 129280 * 5])
-    
-    pad_id: int = 2
-    seed: int = 0
 
 
 class TransformerDataParallelWrappingStrategy(StrEnum):
