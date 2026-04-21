@@ -62,6 +62,7 @@ from .config import (
     TransformerDataParallelWrappingStrategy,
     resolve_block_configs,
 )
+from ..engram.config import EngramConfig
 from .init import InitMethod
 
 if TYPE_CHECKING:
@@ -117,6 +118,7 @@ class Transformer(nn.Module):
         block_overrides: Optional[Dict[int, TransformerBlockConfig]] = None,
         block_pattern: Optional[List[str]] = None,
         embed_scale: Optional[float] = None,
+        engram: Optional[EngramConfig] = None,
     ):
         super().__init__()
 
@@ -159,6 +161,23 @@ class Transformer(nn.Module):
         self.lm_head = lm_head.build(
             d_model=d_model, vocab_size=vocab_size, init_device=init_device
         )
+
+        # ---> NEW ENGRAM INITIALIZATION <---
+        self.engram_modules = None
+        if engram is not None:  # <-- Changed from config.engram
+            import torch.nn as nn
+            from ..engram import Engram
+            
+            # We use a ModuleDict to store the Engrams by their layer ID
+            self.engram_modules = nn.ModuleDict({
+                str(layer_id): Engram(
+                    config=engram,      # <-- Changed
+                    layer_id=layer_id, 
+                    d_model=d_model     # <-- Changed
+                )
+                for layer_id in engram.layer_ids  # <-- Changed
+            })
+        # -----------------------------------
 
         self.init_device = init_device
         self.init_method = InitMethod(init_method)
@@ -557,7 +576,14 @@ class Transformer(nn.Module):
             # Mark sizes as dynamic for torch.compile().
             if self.compile_enabled:
                 mark_dynamic(h, (0, 1), strict=False)
-            h = block(h, input_ids=input_ids, **all_block_kwargs, **block_kwargs) # adding `input_ids=input_ids` for engram input
+            # ---> GLOBAL ENGRAM INJECTION <---
+            # If this layer has an engram module, retrieve the memory and add it to the stream!
+            if self.engram_modules is not None and str(block_idx) in self.engram_modules:
+                h = h + self.engram_modules[str(block_idx)](hidden_states=h, input_ids=input_ids)
+            # ---------------------------------
+
+            # We safely pass h to the block WITHOUT input_ids!
+            h = block(h, **all_block_kwargs, **block_kwargs)
 
         # Get final logits but again pass-through in case of pipeline parallelism.
         if self.lm_head is not None:
