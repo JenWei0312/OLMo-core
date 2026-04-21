@@ -165,7 +165,6 @@ class Transformer(nn.Module):
         # ---> NEW ENGRAM INITIALIZATION <---
         self.engram_modules = None
         if engram is not None:  # <-- Changed from config.engram
-            import torch.nn as nn
             from ..engram import Engram
             
             # We use a ModuleDict to store the Engrams by their layer ID
