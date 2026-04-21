@@ -30,10 +30,14 @@ def run_engram_forward_test():
         engram=engram_config 
     )
 
-    # 3. Build the model directly on the device
-    log.info("🏭 Assembling the factory...")
-    model = config.build(init_device=device)
+    # 3. Build the model on CPU first to avoid the Colab CUDA bug
+    log.info("🏭 Assembling the factory (on CPU)...")
+    model = config.build(init_device="cpu")
     model.init_weights()
+    
+    # Now that weights are initialized, move the whole factory to the GPU!
+    log.info("🚚 Moving factory to GPU...")
+    model = model.to(device)
 
     # 4. Create dummy data ON THE DEVICE
     log.info("📦 Prepping raw materials (tokens)...")
