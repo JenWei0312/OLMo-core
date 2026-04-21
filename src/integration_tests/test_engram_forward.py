@@ -29,15 +29,15 @@ def run_engram_forward_test():
         n_layers=4,
         engram=engram_config 
     )
-
-    # 3. Build the model on CPU first to avoid the Colab CUDA bug
-    log.info("🏭 Assembling the factory (on CPU)...")
-    model = config.build(init_device="cpu")
-    model.init_weights()
     
-    # Now that weights are initialized, move the whole factory to the GPU!
-    log.info("🚚 Moving factory to GPU...")
-    model = model.to(device)
+    # 3. Build the model directly on the GPU
+    log.info("🏭 Assembling the factory (Directly on GPU)...")
+    model = config.build(init_device=device)
+    
+    # We completely skip model.init_weights() because:
+    # 1. We don't care about perfect statistical weight distributions for a dry-run test.
+    # 2. PyTorch modules already have default random weights.
+    # 3. It completely bypasses the Colab NVRTC C++ compilation bug!
 
     # 4. Create dummy data ON THE DEVICE
     log.info("📦 Prepping raw materials (tokens)...")
