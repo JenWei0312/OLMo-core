@@ -175,10 +175,15 @@ class NgramHashMapping:
             for k in range(1, n):
                 mix = np.bitwise_xor(mix, tokens[k] * multipliers[k])
             
-            head_vocab_sizes = self.vocab_size_across_layers[layer_id][n_gram_index]
-            for j in range(self.n_head_per_ngram):
-                mod = int(head_vocab_sizes[j])
-                all_hashes.append((mix % mod).astype(np.int64, copy=False))
+            # -- fix inner for loop by vectorizing across heads --
+            # Vectorize across heads instead of looping
+            head_vocab_sizes = np.array(
+                self.vocab_size_across_layers[layer_id][n_gram_index], 
+                dtype=np.int64
+            )  # (n_heads,)
+            hashes = mix[:, :, None] % head_vocab_sizes  # (B, T, n_heads)
+            all_hashes.append(hashes)
+
         return np.stack(all_hashes, axis=2)
 
     def hash(self, input_ids):
