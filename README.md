@@ -1,4 +1,186 @@
 <div align="center">
+  <img src="https://huggingface.co/datasets/allenai/blog-images/resolve/main/olmo2/olmo.png" alt="OLMo Logo" width="280" style="margin-left:'auto' margin-right:'auto' display:'block'"/>
+  <br>
+  <h1>OLMo-core + Engram</h1>
+  <h4>Integrating DeepSeek's Conditional Memory Module into OLMo-core</h4>
+  <p><em>An independent research integration by <a href="https://www.linkedin.com/in/YOUR_LINKEDIN">Jen Wei</a></em></p>
+</div>
+
+> **Status:** Active development. Forward pass and autograd verified ✅. Training runs pending compute access. See [Roadmap](#roadmap) for full scope.
+
+---
+
+## What This Is
+
+This fork integrates [DeepSeek's Engram module](https://github.com/deepseek-ai/Engram) — a conditional memory mechanism based on n-gram lookup — into [AI2's OLMo-core](https://github.com/allenai/OLMo-core) training infrastructure as an optional architectural component.
+
+Engram provides O(1) static knowledge retrieval as a complementary sparsity axis alongside FFN and MoE computation. This integration makes Engram available to any OLMo-core model configuration via a single config flag, with verified gradient flow through the full training stack.
+
+This is not an official AI2 project. It is independent research motivated by the architectural questions below.
+
+---
+
+## Why This Is Interesting
+
+### In-Context vs. Out-of-Context Memory
+
+OLMo Hybrid's GatedDeltaNet layers perform *in-context* associative memory — dynamically updating recurrent state as they process a sequence. Standard attention similarly operates within the context window. Both mechanisms are fundamentally bounded by sequence length and hidden state capacity.
+
+Engram operates on a qualitatively different axis: *out-of-context* static memory. Its n-gram embedding table is built from the training corpus offline and retrieved via deterministic hash lookup at inference time. It does not learn from the current sequence — it recognizes patterns it has seen before.
+
+These are not competing mechanisms. They address different failure modes:
+- Attention and linear RNNs handle *what has this sequence taught me so far*
+- Engram handles *what do I already know about this token pattern from pretraining*
+
+The hypothesis is that Engram frees up hidden state capacity in GDN and attention layers for genuinely dynamic, context-specific associations — because static pattern reconstruction is offloaded to the lookup table.
+
+### Parameter Allocation and the U-Shaped Scaling Law
+
+DeepSeek's paper identifies an optimal allocation of ~20-25% of sparse model capacity to Engram and ~75-80% to dynamic computation (MoE). Pure MoE is suboptimal because parameter budget is wasted reconstructing static patterns that a lookup table could retrieve in O(1).
+
+The more rigorous question is not *does Engram help* — more parameters almost always help — but *is Engram the most efficient use of that parameter budget?* The U-shaped scaling law suggests yes, up to the optimal allocation point.
+
+This question becomes more interesting in hybrid architectures where GDN layers are already parameter-lean. The optimal allocation curve may shift when the sequence mixer has finite recurrent state capacity.
+
+### Numerical Stability as a Bonus Property
+
+Embedding tables are numerically boring in the best possible way — no nonlinearities, no gradient flow through complex operations, no activation functions to saturate. This makes them:
+
+- Quantization-friendly (INT8/INT4 with minimal quality degradation)
+- Training-stable by construction, independent of any other stability mechanisms
+- A natural complement to architecturally complex components like MoE routing or GDN delta updates
+
+Trading some FFN/MoE parameter budget for embedding table budget is therefore not just a compute efficiency argument — it is also a numerical stability argument. This property holds regardless of what other stability mechanisms (e.g. DeepSeek's manifold hyper-connections) are present in the architecture.
+
+### Inference Efficiency
+
+Engram's embedding table can be offloaded to CPU DRAM with sub-3% throughput penalty via asynchronous PCIe retrieval, masked by early-layer GPU computation. This decouples knowledge storage from GPU HBM — a meaningful practical advantage for deployment at scale.
+
+**Note:** CPU offloading is a known future optimization in this integration. The current implementation runs the embedding table on GPU. See [Roadmap](#roadmap).
+
+---
+
+## Current Status
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `EngramConfig` dataclass | ✅ Done | Integrated into OLMo-core config system |
+| `Engram` module | ✅ Done | Ported and de-hyper-connected from DeepSeek reference |
+| `CompressedTokenizer` | ✅ Done | Vocab compression via canonical normalization |
+| `NgramHashMapping` | ✅ Done | Multi-head hashing, vectorized across heads |
+| `MultiHeadEmbedding` | ✅ Done | Single embedding table with offset indexing |
+| `ShortConv` | ✅ Done | Depthwise conv for local context fusion |
+| Injection into `Transformer.forward()` | ✅ Done | Pre-block residual addition, configurable layer IDs |
+| Autograd / backward pass | ✅ Done | Full gradient flow verified on CUDA |
+| GDN (OLMo Hybrid) layer integration | 🚧 Next | Pure attention skeleton tested; hybrid layers pending |
+| Training script | 🚧 Pending | Blocked on compute access |
+| CPU DRAM offloading | 🔮 Future | Known bottleneck; requires async PCIe engineering |
+| ROCm / AMD validation | 🔮 Future | Planned; motivated by hardware accessibility |
+
+---
+
+## Experimental Design
+
+The core research question is: **how does Engram interact with different combinations of sequence mixer and FFN component?**
+
+This motivates a 2×2 ablation across OLMo-core's existing model families:
+
+|  | **Dense FFN** | **MoE** |
+|--|---------------|---------|
+| **Attention** | OLMo-2 / OLMo-3 | OLMoE |
+| **Linear RNN (GDN)** | OLMo Hybrid + FFN | OLMo Hybrid + MoE |
+
+**Primary hypothesis:** Engram provides the largest relative gain in the Attention + Dense FFN cell, because dense FFN has no existing sparsity mechanism and every token pays the full FFN compute cost regardless of whether it needs it. Engram's static pattern offloading should show the clearest signal here.
+
+**Secondary hypothesis:** In the Linear RNN cells, Engram's benefit is partially mediated by freeing GDN recurrent state capacity for dynamic associations — a qualitatively different mechanism than in pure attention models.
+
+**Priority for initial training run:** Attention + Dense FFN (OLMo-3 7B + ~1B Engram). Cleanest baseline, fewest confounds, most interpretable results.
+
+> 💡 **Compute needed:** A minimal signal run (~10B tokens on 8B parameter model) requires approximately 3-10 days on 8×A100s. If you have access to compute and find this work interesting, please reach out.
+
+---
+
+## Roadmap
+
+**Phase 1 — Integration (current)**
+- [x] Engram module ported and integrated into OLMo-core
+- [x] Forward and backward pass verified
+- [ ] OLMo Hybrid (GDN) layer compatibility
+- [ ] Clean training script for OLMo-3 7B + Engram
+
+**Phase 2 — Minimal Training Run**
+- [ ] 10-50B token run on Attention + Dense FFN config
+- [ ] Loss curve analysis and perplexity comparison vs baseline
+- [ ] Parameter allocation ablation (vary Engram size vs FFN budget)
+
+**Phase 3 — Broader Ablations**
+- [ ] 2×2 grid experiments across model families
+- [ ] Layer placement ablation (layer 2 vs layer 4 injection)
+- [ ] Long-context evaluation (Engram's structural advantage)
+
+**Phase 4 — Efficiency**
+- [ ] GPU-native hash computation (remove CPU bottleneck)
+- [ ] CPU DRAM offloading for embedding table
+- [ ] ROCm / AMD hardware validation
+
+---
+
+## Quick Start
+
+```bash
+# Clone this fork
+git clone -b feature/engram-poc https://github.com/JenWei0312/OLMo-core.git
+cd OLMo-core
+
+# Install
+pip install -e .
+pip install sympy tokenizers transformers
+
+# Run the integration test
+python src/integration_tests/test_engram_forward.py
+```
+
+Expected output: forward pass, loss calculation, backward pass, and optimizer step all succeed on CUDA.
+
+---
+
+## Citation
+
+If you find this integration useful, please also cite the original Engram paper:
+
+```bibtex
+@article{engram2025,
+  title={Conditional Memory via Scalable Lookup: A New Axis of Sparsity for Large Language Models},
+  author={DeepSeek-AI},
+  journal={arXiv preprint arXiv:2601.07372},
+  year={2025}
+}
+```
+
+And the OLMo-core paper:
+
+```bibtex
+@misc{olmo20242olmo2furious,
+      title={{2 OLMo 2 Furious}},
+      author={{Team OLMo} and Pete Walsh and Luca Soldaini and others},
+      year={2024},
+      eprint={2501.00656},
+      archivePrefix={arXiv},
+}
+```
+
+---
+
+*This is independent research conducted without institutional affiliation or compute resources. Feedback and collaboration welcome.*
+
+---
+
+## Original OLMo-core Documentation
+
+> Everything below is the original README from [allenai/OLMo-core](https://github.com/allenai/OLMo-core).
+
+
+<div align="center">
   <!-- <img src="https://github.com/allenai/OLMo/assets/8812459/774ac485-a535-4768-8f7c-db7be20f5cc3" width="300"/> -->
   <img src="https://huggingface.co/datasets/allenai/blog-images/resolve/main/olmo2/olmo.png" alt="OLMo Logo" width="280" style="margin-left:'auto' margin-right:'auto' display:'block'"/>
   <br>
