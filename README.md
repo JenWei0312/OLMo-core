@@ -1,9 +1,9 @@
 <div align="center">
-  <img src="https://huggingface.co/datasets/allenai/blog-images/resolve/main/olmo2/olmo.png" alt="OLMo Logo" width="280" style="margin-left:'auto' margin-right:'auto' display:'block'"/>
+  <img src="https://huggingface.co/datasets/allenai/blog-images/resolve/main/olmo2/olmo.png" alt="OLMo Logo" width="280" style="margin-left: auto; margin-right: auto; display: block;"/>
   <br>
   <h1>OLMo-core + Engram</h1>
   <h4>Integrating DeepSeek's Conditional Memory Module into OLMo-core</h4>
-  <p><em>An independent research integration by <a href="www.linkedin.com/in/jenweiprofile">Jen Wei</a></em></p>
+  <p><em>An independent research integration by <a href="https://www.linkedin.com/in/jenweiprofile">Jen Wei</a></em></p>
 </div>
 
 > **Status:** Active development. Forward pass and autograd verified ✅. Training runs pending compute access. See [Roadmap](#roadmap) for full scope.
