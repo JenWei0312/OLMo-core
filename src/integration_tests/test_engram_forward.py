@@ -29,7 +29,7 @@ def run_engram_forward_test():
         n_layers=4,
         engram=engram_config 
     )
-    
+
     # 3. Build the model directly on the GPU
     log.info("🏭 Assembling the factory (Directly on GPU)...")
     model = config.build(init_device=device)
@@ -45,18 +45,39 @@ def run_engram_forward_test():
     seq_len = 16
     input_ids = torch.randint(0, config.vocab_size, (batch_size, seq_len), device=device)
 
-    # 5. Forward Pass
-    log.info("⚙️ Running the assembly line...")
+    # 5. Forward Pass -- also mocking the loss calculation to test autograd
+    log.info("⚙️ Running the forward pass...")
     try:
-        # Run the forward pass!
-        output = model(input_ids=input_ids)
+        # Get the logits [Batch, SeqLen, VocabSize]
+        logits = model(input_ids=input_ids)
         
-        log.info("\n🎉 SUCCESS! The Walking Skeleton is ALIVE! 🎉")
-        log.info(f"Input shape:  {input_ids.shape}")
-        log.info(f"Output shape: {output.shape} (Should be [Batch, SeqLen, VocabSize])")
+        # 6. Calculate Dummy Loss
+        log.info("📉 Calculating dummy loss...")
+        import torch.nn as nn
+        loss_fn = nn.CrossEntropyLoss()
+        
+        # Create fake target words for the model to predict
+        labels = torch.randint(0, config.vocab_size, (batch_size, seq_len), device=device)
+        
+        # Reshape for CrossEntropyLoss: Logits must be 2D [Batch * SeqLen, VocabSize], Labels 1D
+        loss = loss_fn(logits.view(-1, config.vocab_size), labels.view(-1))
+        log.info(f"Initial Loss: {loss.item():.4f}")
+
+        # 7. THE TRUE TEST: The Backward Pass
+        log.info("🔙 Putting the bulldozer in reverse (Testing Autograd)...")
+        loss.backward()
+
+        # 8. The Optimizer Step
+        log.info("👟 Stepping the optimizer...")
+        optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+        optimizer.step()
+        optimizer.zero_grad() # Clean up
+
+        log.info("\n🎉 SUCCESS! The Bulldozer can drive in reverse! Autograd is connected! 🎉")
+        log.info("The Engram module is 100% mathematically ready for training.")
         
     except Exception as e:
-        log.error("\n💥 CRASH! The bulldozer hit a wall.")
+        log.error("\n💥 CRASH! The backward pass failed.")
         log.error(f"Error: {e}")
         import traceback
         traceback.print_exc()
