@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import logging
+import traceback # <--- WE WILL NEVER FLY BLIND AGAIN!
 
 # Import OLMo's configs
 from olmo_core.nn.transformer.config import TransformerConfig
@@ -24,7 +25,6 @@ def test_config(name: str, config: TransformerConfig, device: str, input_ids: to
         logits = model(input_ids=input_ids)
         
         log.info("📉 Calculating loss...")
-        #import torch.nn as nn
         loss_fn = nn.CrossEntropyLoss()
         loss = loss_fn(logits.view(-1, config.vocab_size), labels.view(-1))
         
@@ -41,6 +41,8 @@ def test_config(name: str, config: TransformerConfig, device: str, input_ids: to
     except Exception as e:
         log.error(f"❌ CRASH on {name}!")
         log.error(f"Error: {e}")
+        # Print the exact line and kernel that failed!
+        traceback.print_exc() 
         return False
 
 def run_2x2_grid_test():
@@ -58,36 +60,54 @@ def run_2x2_grid_test():
     input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
     labels = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
 
-    # 3. Define the 2x2 Grid
     experiments = {}
 
-    # Cell 1: Attention + Dense FFN
+    # ---------------------------------------------------------
+    # Cell 1: Attention + Dense FFN (Baseline)
+    # ---------------------------------------------------------
     experiments["1. Attention + Dense FFN (Baseline)"] = TransformerConfig.olmo2_1M(
         vocab_size=vocab_size, n_layers=4, engram=engram_config
     )
 
+    # ---------------------------------------------------------
     # Cell 2: Attention + MoE
+    # ---------------------------------------------------------
     cfg_attn_moe = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
-    cfg_attn_moe.block.feed_forward_moe = MoEConfig(
-        num_experts=8, 
-        router=MoERouterConfig(top_k=2) # <--- NESTED DATACLASS INITIALIZATION!
-    )
-    cfg_attn_moe.block.name = "moe"
+    
+    # DICTIONARY SURGERY: Safely swap the dense FFN for the MoE config
+    block_dict = cfg_attn_moe.block.as_dict()
+    if "feed_forward" in block_dict:
+        del block_dict["feed_forward"]  # Remove the dense FFN so the factory doesn't crash!
+    
+    block_dict["name"] = "moe"
+    block_dict["feed_forward_moe"] = MoEConfig(num_experts=8, router=MoERouterConfig(top_k=2))
+    cfg_attn_moe.block = block_dict
+    
     experiments["2. Attention + MoE"] = cfg_attn_moe
 
+    # ---------------------------------------------------------
     # Cell 3: GDN (Linear RNN) + Dense FFN
+    # ---------------------------------------------------------
     cfg_gdn_dense = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
     cfg_gdn_dense.block.sequence_mixer = GatedDeltaNetConfig()
     experiments["3. Linear RNN (GDN) + Dense FFN"] = cfg_gdn_dense
 
+    # ---------------------------------------------------------
     # Cell 4: GDN (Linear RNN) + MoE
+    # ---------------------------------------------------------
     cfg_gdn_moe = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
-    cfg_gdn_moe.block.sequence_mixer = GatedDeltaNetConfig() 
-    cfg_gdn_moe.block.feed_forward_moe = MoEConfig(
-        num_experts=8, 
-        router=MoERouterConfig(top_k=2) # <--- NESTED HERE TOO!
-    )
-    cfg_gdn_moe.block.name = "moe"
+    
+    # DICTIONARY SURGERY: Swap both the mixer and the FFN
+    block_dict_gdn = cfg_gdn_moe.block.as_dict()
+    if "feed_forward" in block_dict_gdn:
+        del block_dict_gdn["feed_forward"]
+        
+    block_dict_gdn["name"] = "moe"
+    block_dict_gdn["sequence_mixer"] = GatedDeltaNetConfig()
+    block_dict_gdn["feed_forward_moe"] = MoEConfig(num_experts=8, router=MoERouterConfig(top_k=2))
+    cfg_gdn_moe.block = block_dict_gdn
+    
+    experiments["4. Linear RNN (GDN) + MoE"] = cfg_gdn_moe
 
     # 4. Execute the Grid
     results = {}
