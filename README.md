@@ -124,6 +124,7 @@ cd OLMo-core
 # Install
 pip install -e .
 pip install sympy tokenizers transformers
+pip install flash-linear-attention # Add flash attention for Gated Delta Net
 
 # Run the integration test
 python src/integration_tests/test_engram_forward.py
