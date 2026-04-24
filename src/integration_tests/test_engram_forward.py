@@ -51,7 +51,7 @@ def run_2x2_grid_test():
 
     # 1. Global Engram Config
     engram_config = EngramConfig(
-        max_ngram_size=3, n_embed_per_ngram=64, n_head_per_ngram=2,   
+        max_ngram_size=3, n_embed_per_ngram=128, n_head_per_ngram=4,   
         layer_ids=[1, 2], engram_vocab_size=[1000, 1000] 
     )
 
@@ -65,37 +65,48 @@ def run_2x2_grid_test():
     # ---------------------------------------------------------
     # Cell 1: Attention + Dense FFN (Baseline)
     # ---------------------------------------------------------
-    experiments["1. Attention + Dense FFN (Baseline)"] = TransformerConfig.olmo2_1M(
-        vocab_size=vocab_size, n_layers=4, engram=engram_config
-    )
+    cfg_attn_dense = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
+    cfg_attn_dense.d_model = 128 # Override microscopic dimensions!
+    cfg_attn_dense.block.attention.num_heads = 4 
+    experiments["1. Attention + Dense FFN (Baseline)"] = cfg_attn_dense
 
     # ---------------------------------------------------------
     # Cell 2: Attention + MoE
     # ---------------------------------------------------------
     cfg_attn_moe = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
-    cfg_attn_moe.block.name = "moe"
-    cfg_attn_moe.block.feed_forward = None  # Turn off the dense FFN
-    cfg_attn_moe.block.feed_forward_moe = MoEConfig(num_experts=8, router=MoERouterConfig(top_k=2))
+    cfg_attn_moe.d_model = 128
+    cfg_attn_moe.block.attention.num_heads = 4
+    
+    block_dict = cfg_attn_moe.block.as_dict()
+    if "feed_forward" in block_dict: del block_dict["feed_forward"]
+    
+    block_dict["name"] = "moe"
+    block_dict["feed_forward_moe"] = MoEConfig(num_experts=8, router=MoERouterConfig(top_k=2))
+    cfg_attn_moe.block = block_dict
     experiments["2. Attention + MoE"] = cfg_attn_moe
 
     # ---------------------------------------------------------
     # Cell 3: GDN (Linear RNN) + Dense FFN
     # ---------------------------------------------------------
     cfg_gdn_dense = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
-    cfg_gdn_dense.block.sequence_mixer = GatedDeltaNetConfig()
+    cfg_gdn_dense.d_model = 128
+    # Explicitly tell GDN to use 4 heads so it doesn't crash computing group sizes
+    cfg_gdn_dense.block.sequence_mixer = GatedDeltaNetConfig(num_heads=4)
     experiments["3. Linear RNN (GDN) + Dense FFN"] = cfg_gdn_dense
 
     # ---------------------------------------------------------
     # Cell 4: GDN (Linear RNN) + MoE
     # ---------------------------------------------------------
     cfg_gdn_moe = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
+    cfg_gdn_moe.d_model = 128
     
-    # DICTIONARY SURGERY: Swap both the mixer and the FFN
-    cfg_gdn_moe = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
-    cfg_gdn_moe.block.name = "moe"
-    cfg_gdn_moe.block.sequence_mixer = GatedDeltaNetConfig()
-    cfg_gdn_moe.block.feed_forward = None   # Turn off the dense FFN
-    cfg_gdn_moe.block.feed_forward_moe = MoEConfig(num_experts=8, router=MoERouterConfig(top_k=2))
+    block_dict_gdn = cfg_gdn_moe.block.as_dict()
+    if "feed_forward" in block_dict_gdn: del block_dict_gdn["feed_forward"]
+        
+    block_dict_gdn["name"] = "moe"
+    block_dict_gdn["sequence_mixer"] = GatedDeltaNetConfig(num_heads=4)
+    block_dict_gdn["feed_forward_moe"] = MoEConfig(num_experts=8, router=MoERouterConfig(top_k=2))
+    cfg_gdn_moe.block = block_dict_gdn
     experiments["4. Linear RNN (GDN) + MoE"] = cfg_gdn_moe
 
     # 4. Execute the Grid
