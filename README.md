@@ -6,7 +6,7 @@
   <p><em>An independent research integration by <a href="https://www.linkedin.com/in/jenweiprofile">Jen Wei</a></em></p>
 </div>
 
-> **Status:** Active development. Forward pass and autograd verified ✅. Training runs pending compute access. See [Roadmap](#roadmap) for full scope.
+> **Status:** Active development. Forward pass and autograd verified across all four architecture configs ✅. Training runs pending compute access. See [Roadmap](#roadmap) for full scope.
 
 ---
 
@@ -14,7 +14,7 @@
 
 This fork integrates [DeepSeek's Engram module](https://github.com/deepseek-ai/Engram) — a conditional memory mechanism based on n-gram lookup — into [AI2's OLMo-core](https://github.com/allenai/OLMo-core) training infrastructure as an optional architectural component.
 
-Engram provides O(1) static knowledge retrieval as a complementary sparsity axis alongside FFN and MoE computation. This integration makes Engram available to OLMo-core's standard Transformer configuration via a single config flag, with verified forward pass and gradient flow. Compatibility with other configurations (OLMo Hybrid, MoE) is in progress — see [Current Status](#current-status).
+Engram provides O(1) static knowledge retrieval as a complementary sparsity axis alongside FFN and MoE computation. This integration makes Engram available to all OLMo-core model families via a single config flag, with verified forward pass and gradient flow across all four configurations: Attention + Dense FFN, Attention + MoE, GDN + Dense FFN, and GDN + MoE.
 
 This is not an official AI2 project. It is independent research motivated by the architectural questions below.
 
@@ -63,7 +63,7 @@ Embedding tables have no nonlinearities, no saturating activations, no complex g
 | Training script | 🚧 Next | Config ready; seeking compute access |
 | GPU-native hash computation | 🔭 Prototyping | Replace numpy CPU hashing with pure PyTorch ops |
 | CPU DRAM offloading | 🔭 Prototyping | Single-device prototype to validate offload/fetch logic |
-| GDN (OLMo Hybrid) layer integration | 🚧 Pending | Pure attention skeleton tested; hybrid layers pending |
+| GDN (OLMo Hybrid) layer integration | ✅ Done | All 4 configs in 2x2 grid verified |
 | TP / DP support for Engram | 🔮 Future | Embedding table sharding under tensor parallelism |
 | ROCm / AMD validation | 🔮 Future | Planned; motivated by hardware accessibility |
 
@@ -94,7 +94,7 @@ This motivates a 2×2 ablation across OLMo-core's existing model families:
 
 **Phase 1 — Integration (current)**
 - [x] Engram module ported and integrated into OLMo-core
-- [x] Forward and backward pass verified
+- [x] Forward and backward pass verified across all 4 configs (Attention + Dense FFN, Attention + MoE, GDN + Dense FFN, GDN + MoE)
 - [ ] Clean training script for OLMo-3 7B + Engram
 
 **Phase 2 — Minimal Training Run**
@@ -103,7 +103,6 @@ This motivates a 2×2 ablation across OLMo-core's existing model families:
 - [ ] Evaluation on knowledge-intensive benchmarks (MMLU, ARC) and reasoning benchmarks (BBH, GSM8K) to characterize where Engram helps most
 
 **Phase 3 — Broader Ablations**
-- [ ] OLMo Hybrid (GDN) layer compatibility
 - [ ] 2×2 grid experiments across model families
 - [ ] Layer placement ablation (layer 2 vs layer 4 injection)
 - [ ] Long-context evaluation (Engram's structural advantage)
