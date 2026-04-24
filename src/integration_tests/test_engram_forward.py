@@ -4,7 +4,7 @@ import logging
 
 # Import OLMo's configs
 from olmo_core.nn.transformer.config import TransformerConfig
-from olmo_core.nn.moe.moe import MoEConfig
+from olmo_core.nn.moe.moe import MoEConfig, MoERouterConfig
 from olmo_core.nn.attention.recurrent import GatedDeltaNetConfig
 from olmo_core.nn.engram.config import EngramConfig
 
@@ -68,7 +68,10 @@ def run_2x2_grid_test():
 
     # Cell 2: Attention + MoE
     cfg_attn_moe = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
-    cfg_attn_moe.block.feed_forward_moe = MoEConfig(num_experts=8, top_k=2)
+    cfg_attn_moe.block.feed_forward_moe = MoEConfig(
+        num_experts=8, 
+        router=MoERouterConfig(top_k=2) # <--- NESTED DATACLASS INITIALIZATION!
+    )
     cfg_attn_moe.block.name = "moe"
     experiments["2. Attention + MoE"] = cfg_attn_moe
 
@@ -80,9 +83,11 @@ def run_2x2_grid_test():
     # Cell 4: GDN (Linear RNN) + MoE
     cfg_gdn_moe = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
     cfg_gdn_moe.block.sequence_mixer = GatedDeltaNetConfig() 
-    cfg_gdn_moe.block.feed_forward_moe = MoEConfig(num_experts=8, top_k=2)
+    cfg_gdn_moe.block.feed_forward_moe = MoEConfig(
+        num_experts=8, 
+        router=MoERouterConfig(top_k=2) # <--- NESTED HERE TOO!
+    )
     cfg_gdn_moe.block.name = "moe"
-    experiments["4. Linear RNN (GDN) + MoE"] = cfg_gdn_moe
 
     # 4. Execute the Grid
     results = {}
