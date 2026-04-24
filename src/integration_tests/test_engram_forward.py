@@ -91,7 +91,8 @@ def run_2x2_grid_test():
     cfg_gdn_dense = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
     cfg_gdn_dense.d_model = 128
     # Explicitly tell GDN to use 4 heads so it doesn't crash computing group sizes
-    cfg_gdn_dense.block.sequence_mixer = GatedDeltaNetConfig(num_heads=4)
+    #cfg_gdn_dense.block.sequence_mixer = GatedDeltaNetConfig(num_heads=4)
+    cfg_gdn_dense.block.sequence_mixer.n_heads=4
     experiments["3. Linear RNN (GDN) + Dense FFN"] = cfg_gdn_dense
 
     # ---------------------------------------------------------
@@ -104,7 +105,8 @@ def run_2x2_grid_test():
     if "feed_forward" in block_dict_gdn: del block_dict_gdn["feed_forward"]
         
     block_dict_gdn["name"] = "moe"
-    block_dict_gdn["sequence_mixer"] = GatedDeltaNetConfig(num_heads=4)
+    #block_dict_gdn["sequence_mixer"] = GatedDeltaNetConfig(num_heads=4)
+    cfg_gdn_dense.block.sequence_mixer.n_heads=4
     block_dict_gdn["feed_forward_moe"] = MoEConfig(num_experts=8, router=MoERouterConfig(top_k=2))
     cfg_gdn_moe.block = block_dict_gdn
     experiments["4. Linear RNN (GDN) + MoE"] = cfg_gdn_moe
