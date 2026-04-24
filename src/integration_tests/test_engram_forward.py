@@ -67,7 +67,7 @@ def run_2x2_grid_test():
     # ---------------------------------------------------------
     cfg_attn_dense = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
     cfg_attn_dense.d_model = 128 # Override microscopic dimensions!
-    cfg_attn_dense.block.attention.num_heads = 4 
+    cfg_attn_dense.block.attention.n_heads = 4 
     experiments["1. Attention + Dense FFN (Baseline)"] = cfg_attn_dense
 
     # ---------------------------------------------------------
@@ -75,7 +75,7 @@ def run_2x2_grid_test():
     # ---------------------------------------------------------
     cfg_attn_moe = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
     cfg_attn_moe.d_model = 128
-    cfg_attn_moe.block.attention.num_heads = 4
+    cfg_attn_moe.block.attention.n_heads = 4
     
     block_dict = cfg_attn_moe.block.as_dict()
     if "feed_forward" in block_dict: del block_dict["feed_forward"]
