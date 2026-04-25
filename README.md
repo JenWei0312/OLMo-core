@@ -159,6 +159,10 @@ And the OLMo-core paper:
 }
 ```
 
+## Acknowledgements
+Research design, architectural decisions, and theoretical framing by Jen Wei. 
+Implementation developed with AI coding assistance.
+
 ---
 
 *This is independent research conducted without institutional affiliation or compute resources. Feedback and collaboration welcome.*
