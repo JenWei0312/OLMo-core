@@ -1,0 +1,15 @@
+OLMo-core + Engram
+Copyright 2026 Jen Wei (https://linkedin.com)
+
+This product includes software developed at:
+- The Allen Institute for AI (AI2) (https://allenai.org)
+- The DeepSeek-V3 Research Team (Conditional Memory Module architecture)
+
+MODIFICATIONS:
+This repository is an independent research integration. The original 
+OLMo-core framework has been modified by Jen Wei to integrate 
+the Engram (Conditional Memory) module. 
+
+ATTRIBUTION:
+If you use this research or code in your own work, attribution to 
+Jen Wei is required under the terms of the Apache License 2.0.
