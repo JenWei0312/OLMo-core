@@ -20,6 +20,7 @@ from ..attention import (
     SlidingWindowAttentionConfig,
 )
 from ..engram.config import EngramConfig
+from ..engram import Engram
 
 from ..buffer_cache import BufferCache
 from ..config import ModelConfig, ModuleConfig
