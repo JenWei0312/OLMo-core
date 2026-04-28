@@ -184,7 +184,8 @@ class NgramHashMapping:
             hashes = mix[:, :, None] % head_vocab_sizes  # (B, T, n_heads)
             all_hashes.append(hashes)
 
-        return np.stack(all_hashes, axis=2)
+        # Concatenate along the last axis to make it (B, T, 8)
+        return np.concatenate(all_hashes, axis=2)
 
     def hash(self, input_ids):
         input_ids = self.compressed_tokenizer(input_ids)
