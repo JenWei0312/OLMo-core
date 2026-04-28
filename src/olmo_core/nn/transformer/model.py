@@ -175,7 +175,7 @@ class Transformer(nn.Module):
                     d_model=d_model     # <-- Changed
                 )
                 for layer_id in engram.layer_ids  # <-- Changed
-            })
+            }).to(init_device) # <--- ADD THIS RIGHT HERE! for the device placement of the engram modules 😤
         # -----------------------------------
 
         self.init_device = init_device
