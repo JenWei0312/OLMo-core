@@ -165,7 +165,7 @@ class Transformer(nn.Module):
         # ---> NEW ENGRAM INITIALIZATION <---
         self.engram_modules = None
         if engram is not None:  # <-- Changed from config.engram
-            from ..engram import Engram
+            from ..engram.engram import Engram
             
             # We use a ModuleDict to store the Engrams by their layer ID
             self.engram_modules = nn.ModuleDict({
