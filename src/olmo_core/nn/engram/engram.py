@@ -204,6 +204,8 @@ class MultiHeadEmbedding(nn.Module):
         self.embedding = nn.Embedding(num_embeddings=sum(list_of_N), embedding_dim=D)
 
     def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+        # Dynamically ensure the offsets are on the exact same device as the input_ids
+        self.offsets = self.offsets.to(input_ids.device)
         return self.embedding(input_ids + self.offsets)
     
 # ==========================================
