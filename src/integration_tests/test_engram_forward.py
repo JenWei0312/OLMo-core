@@ -65,7 +65,7 @@ def run_2x2_grid_test():
     # ---------------------------------------------------------
     # Cell 1: Attention + Dense FFN (Baseline)
     # ---------------------------------------------------------
-    cfg_attn_dense = TransformerConfig.olmo3_7B(vocab_size=vocab_size, n_layers=4, engram=engram_config)
+    cfg_attn_dense = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
     cfg_attn_dense.d_model = 128 # Override microscopic dimensions!
     cfg_attn_dense.block.sequence_mixer.n_heads = 4 #<- it's in the sequence_mixer config
     experiments["1. Attention + Dense FFN (Baseline)"] = cfg_attn_dense
