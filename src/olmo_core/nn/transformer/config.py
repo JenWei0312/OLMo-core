@@ -387,6 +387,7 @@ class TransformerConfig(ModelConfig):
                 block_overrides=self.block_overrides,
                 block_pattern=self.block_pattern,
                 embed_scale=self.embed_scale,
+                engram=self.engram, # <--- THE MISSING LINK for fixing ghost run
             )
         elif self.name == TransformerType.normalized:
             assert self.embedding_norm is None
@@ -404,6 +405,7 @@ class TransformerConfig(ModelConfig):
                 embedding_init_std=self.embedding_init_std,
                 block_overrides=self.block_overrides,
                 block_pattern=self.block_pattern,
+                engram=self.engram, # <--- THE MISSING LINK!
             )
         elif self.name == TransformerType.moe:
             model = MoETransformer(
@@ -421,6 +423,7 @@ class TransformerConfig(ModelConfig):
                 embedding_init_std=self.embedding_init_std,
                 block_overrides=self.block_overrides,
                 block_pattern=self.block_pattern,
+                engram=self.engram, # <--- THE MISSING LINK!
             )
         else:
             raise NotImplementedError(self.name)
