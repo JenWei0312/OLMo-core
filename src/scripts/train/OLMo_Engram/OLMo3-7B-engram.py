@@ -30,8 +30,8 @@ from olmo_core.train.train_module import (
     TransformerTrainModuleConfig,
 )
 
-SEQUENCE_LENGTH = 8 * 1024
-GLOBAL_BATCH_SIZE = 4 * 1024 * 1024  # ~4M tokens
+SEQUENCE_LENGTH = 2 * 1024
+GLOBAL_BATCH_SIZE = 1 * 1024 * 1024  # ~1M tokens
 
 
 def build_model_config(common: CommonComponents) -> TransformerConfig:
@@ -133,7 +133,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
 
     return (
         TrainerConfig(
-            save_folder=f"gs://ai2-llm/checkpoints/{common.run_name}/",
+            save_folder=f"./checkpoints/{common.run_name}/", # <-- to be updated once we have compute
             save_overwrite=True,
             metrics_collect_interval=50,
             cancel_check_interval=cancel_check_interval,
@@ -143,7 +143,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
         .with_callback(
             "checkpointer",
             CheckpointerCallback(
-                save_interval=1000,
+                save_interval=100,
                 ephemeral_save_interval=None,
                 save_async=False,
             ),
@@ -152,8 +152,9 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
             "comet",
             CometCallback(
                 name=run_name,
-                workspace="ai2",
-                project="olmo3",
+                workspace="jenwei0312",                     # <-- to be updated once we have compute
+                save_overwrite=True,
+                project="olmo3-engram-experiments",
                 enabled=False,
                 cancel_check_interval=cancel_check_interval,
             ),
@@ -163,9 +164,9 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
             "wandb",
             WandBCallback(
                 name=run_name,
-                group=f"{common.run_name}-engram", # <-- Differentiate the group
+                group=f"{common.run_name}-engram",          # <-- Differentiate the group
                 entity="ai2-llm",
-                project="olmo3-engram-experiments",       # <-- Send to an experimental project
+                project="olmo3-engram-experiments",         # <-- Send to an experimental project
                 enabled=True,
                 cancel_check_interval=cancel_check_interval,
             ),
