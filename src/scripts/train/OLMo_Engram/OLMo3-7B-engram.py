@@ -137,13 +137,13 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
             save_overwrite=True,
             metrics_collect_interval=50,
             cancel_check_interval=cancel_check_interval,
-            max_duration=Duration.tokens(int(5e12)),
+            max_duration=Duration.tokens(int(100000)),
             hard_stop=Duration.tokens(int(4e12)),
         )
         .with_callback(
             "checkpointer",
             CheckpointerCallback(
-                save_interval=100,
+                save_interval=20,
                 ephemeral_save_interval=None,
                 save_async=False,
             ),
