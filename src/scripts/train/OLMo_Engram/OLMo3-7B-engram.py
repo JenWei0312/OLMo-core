@@ -150,7 +150,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
             CometCallback(
                 name=run_name,
                 workspace="jenwei0312",                     # <-- to be updated once we have compute
-                save_overwrite=True,
+                #save_overwrite=True,                       # <-- nuke this 😭
                 project="olmo3-engram-experiments",
                 enabled=False,
                 cancel_check_interval=cancel_check_interval,
