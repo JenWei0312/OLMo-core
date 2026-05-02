@@ -98,7 +98,7 @@ def build_data_components(
     include_instance_filter: bool = False,
 ) -> DataComponents:
     dataset_config = NumpyFSLDatasetConfig(
-        paths=["/workspace/dummy_data/*.npy"], # Hack the path to Point to our single downloaded file!
+        paths=["/workspace/dummy_data/000000.npy"], # Hack the path to Point to our single downloaded file!
         tokenizer=common.tokenizer,
         mix_base_dir=common.root_dir,
         work_dir=common.work_dir,
