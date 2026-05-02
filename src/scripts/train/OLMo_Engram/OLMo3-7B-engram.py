@@ -10,6 +10,7 @@ from olmo_core.data import (
     NumpyDataLoaderConfig,
     NumpyFSLDatasetConfig,
 )
+
 from olmo_core.distributed.parallel import DataParallelType
 from olmo_core.float8 import Float8Config
 # from olmo_core.internal.common import CLUSTER_TO_GPU_TYPE  #<-- delete cause broke
@@ -96,8 +97,8 @@ def build_data_components(
     intra_document_masking: bool = False,
     include_instance_filter: bool = False,
 ) -> DataComponents:
-    dataset_config = NumpyFSLDatasetConfig.from_data_mix(
-        DataMix.OLMo_mix_0625,
+    dataset_config = NumpyFSLDatasetConfig(
+        paths=["/workspace/dummy_data/*.npy"], # Hack the path to Point to our single downloaded file!
         tokenizer=common.tokenizer,
         mix_base_dir=common.root_dir,
         work_dir=common.work_dir,
