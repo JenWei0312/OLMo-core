@@ -48,7 +48,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         n_head_per_ngram=8,
         layer_ids=[1, 14],  # early-layer injection and mid-layer injection!
         # Dynamic multiples of the exact tokenizer vocab!
-        engram_vocab_size=[vocab_size * 5, vocab_size * 5]
+        engram_vocab_size=[vocab_size, vocab_size ] # <- reducded from 10x to 1x to save memory
     )
     # --------------------------------------
     # 3. We pass BOTH the vocab size and the engram config to the factory
@@ -78,7 +78,7 @@ def build_train_module_config(common: CommonComponents) -> TransformerTrainModul
                 )
             ],
         ),
-        compile_model=True,
+        compile_model=False, #<- set to false to save memory
         dp_config=TransformerDataParallelConfig(
             name=DataParallelType.hsdp,
             param_dtype=DType.bfloat16,
