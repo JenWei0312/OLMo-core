@@ -31,7 +31,7 @@ from olmo_core.train.train_module import (
     TransformerTrainModuleConfig,
 )
 
-SEQUENCE_LENGTH = 512 # <- reduced from 2048 b/c OOM
+SEQUENCE_LENGTH = 128 # <- reduced from 2048 b/c OOM
 GLOBAL_BATCH_SIZE = 1 * 512 * 512  # ~0.25M tokens, due to OOM
 
 
