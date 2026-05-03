@@ -82,7 +82,7 @@ def build_train_module_config(common: CommonComponents) -> TransformerTrainModul
         dp_config=TransformerDataParallelConfig(
             name=DataParallelType.hsdp,
             param_dtype=DType.bfloat16,
-            reduce_dtype=DType.float32,
+            reduce_dtype=DType.bfloat16, #<- set to bfloat16 to save memory
             wrapping_strategy=TransformerDataParallelWrappingStrategy.blocks,
         ),
         float8_config=Float8Config(enabled=False),
