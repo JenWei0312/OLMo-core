@@ -46,13 +46,13 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         max_ngram_size=3,
         n_embed_per_ngram=1280,
         n_head_per_ngram=8,
-        layer_ids=[1, 14],  # early-layer injection and mid-layer injection!
+        layer_ids=[1, 5],  # early-layer injection and mid-layer injection!
         # Dynamic multiples of the exact tokenizer vocab!
         engram_vocab_size=[vocab_size, vocab_size ] # <- reducded from 10x to 1x to save memory
     )
     # --------------------------------------
     # 3. We pass BOTH the vocab size and the engram config to the factory
-    return TransformerConfig.olmo3_7B(
+    return TransformerConfig.olmo3_3B(
         vocab_size=vocab_size,
         engram=engram_config,# <--- THE INJECTION
     )
