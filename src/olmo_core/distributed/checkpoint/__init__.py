@@ -78,7 +78,7 @@ def save_state_dict(
     thread_count: Optional[int] = None,
     process_count: Optional[int] = None,
     throttle_uploads: bool = False,
-    enable_plan_caching: bool = False,
+    #enable_plan_caching: bool = False,
     _skip_prepare: bool = False,
 ):
     """
@@ -102,7 +102,8 @@ def save_state_dict(
     if not _skip_prepare:
         dir = _prepare_env_for_save(dir, process_group=process_group, save_overwrite=save_overwrite)
     planner = DefaultSavePlanner(
-        dedup_save_to_lowest_rank=True, enable_plan_caching=enable_plan_caching
+        dedup_save_to_lowest_rank=True, 
+        #enable_plan_caching=enable_plan_caching
     )
     dist_cp.state_dict_saver.save(
         state_dict,
