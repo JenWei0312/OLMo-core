@@ -138,14 +138,15 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
             max_duration=Duration.tokens(int(100000)),
             hard_stop=Duration.tokens(int(4e12)),
         )
-        .with_callback(
-            "checkpointer",
-            CheckpointerCallback(
-                save_interval=20,
-                ephemeral_save_interval=None,
-                save_async=False,
-            ),
-        )
+        # comment out checkpointer callback for now to save memory, will add back in a future iteration once we have the training loop stabilized and can confirm that checkpoints are being saved correctly without OOM issues.
+        #.with_callback(
+        #    "checkpointer",
+        #    CheckpointerCallback(
+        #        save_interval=20,
+        #        ephemeral_save_interval=None,
+        #        save_async=False,
+        #    ),
+        #)
         .with_callback(
             "comet",
             CometCallback(
