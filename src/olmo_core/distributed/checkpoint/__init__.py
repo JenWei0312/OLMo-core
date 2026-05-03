@@ -78,7 +78,7 @@ def save_state_dict(
     thread_count: Optional[int] = None,
     process_count: Optional[int] = None,
     throttle_uploads: bool = False,
-    #enable_plan_caching: bool = False,
+    enable_plan_caching: bool = False,
     _skip_prepare: bool = False,
 ):
     """
