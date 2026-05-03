@@ -166,7 +166,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
                 group=f"{common.run_name}-engram",          # <-- Differentiate the group
                 entity="ai2-llm",
                 project="olmo3-engram-experiments",         # <-- Send to an experimental project
-                enabled=True,
+                enabled=False,
                 cancel_check_interval=cancel_check_interval,
             ),
         )
