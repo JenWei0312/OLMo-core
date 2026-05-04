@@ -138,15 +138,17 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
             max_duration=Duration.tokens(int(100000)),
             hard_stop=Duration.tokens(int(4e12)),
         )
-        # comment out checkpointer callback for now to save memory, will add back in a future iteration once we have the training loop stabilized and can confirm that checkpoints are being saved correctly without OOM issues.
-        #.with_callback(
-        #    "checkpointer",
-        #    CheckpointerCallback(
-        #        save_interval=20,
-        #        ephemeral_save_interval=None,
-        #        save_async=False,
-        #    ),
-        #)
+        # manually disable check pointing
+        .with_callback(
+            "checkpointer",
+            CheckpointerCallback(
+                save_interval=9999,
+                ephemeral_save_interval=None,
+                enabled=False,                  # <-- THE TRUE KILL SWITCH
+                pre_train_checkpoint=False,     # <-- Stop the Step 0 save
+                save_async=False,
+            ),
+        )
         .with_callback(
             "comet",
             CometCallback(
@@ -154,8 +156,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
                 workspace="jenwei0312",                     # <-- to be updated once we have compute
                 #save_overwrite=True,                       # <-- nuke this 😭
                 project="olmo3-engram-experiments",
-                enabled=False,
-                cancel_check_interval=cancel_check_interval,
+                enabled=False,                              # <-- Disable for now since we use w&b for this experiment
             ),
         )
 
