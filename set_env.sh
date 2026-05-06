@@ -66,7 +66,7 @@ echo "📊 Checking for Dataset..."
 mkdir -p /workspace/dummy_data
 if [ ! -f "/workspace/dummy_data/000000.npy" ]; then
     echo "⬇️ Downloading dataset..."
-    wget -qO /workspace/dummy_data/000000.npy https://olmo-data.org/preprocessed/dolma3-0625/v0.1-official/allenai/dolma3-tokenizer/olmocr_science_pdfs/science_math_and_technology/000000.npy
+    wget -O /workspace/dummy_data/000000.npy https://olmo-data.org/preprocessed/dolma3-0625/v0.1-official/allenai/dolma3-tokenizer/olmocr_science_pdfs/science_math_and_technology/000000.npy
     echo "✅ Dataset downloaded!"
 else
     echo "✅ Dataset already exists."
