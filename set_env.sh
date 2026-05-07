@@ -61,16 +61,18 @@ find src -type f -name "*.py" -exec sed -i 's/"flash_2"/"torch"/g' {} +
 find src -type f -name "*.py" -exec sed -i "s/'flash_2'/'torch'/g" {} +
 find src -type f -name "*.py" -exec sed -i 's/m\.apply_compile()/pass/g' {} +
 
-# 8. THE DATASET SYNC
-echo "📊 Checking for Dataset..."
+# 8. THE DATASET SYNC (FAKE DUMMY DATA)
+echo "📊 Generating Fake Dummy Dataset..."
 mkdir -p /workspace/dummy_data
-if [ ! -f "/workspace/dummy_data/000000.npy" ]; then
-    echo "⬇️ Downloading dataset..."
-    wget -O /workspace/dummy_data/000000.npy https://olmo-data.org/preprocessed/dolma3-0625/v0.1-official/allenai/dolma3-tokenizer/olmocr_science_pdfs/science_math_and_technology/000000.npy
-    echo "✅ Dataset downloaded!"
-else
-    echo "✅ Dataset already exists."
-fi
+
+# Use Python to instantly create an .npy file with 10 million random tokens
+python -c "
+import numpy as np
+print('Generating random tokens...')
+dummy_data = np.random.randint(0, 50257, size=(10000000,), dtype=np.uint16)
+np.save('/workspace/dummy_data/000000.npy', dummy_data)
+print('✅ Dummy dataset created!')
+"
 
 echo "🎉 Environment is completely built, bypassed, and data is loaded!"
 echo "⚠️  (If your terminal prompt does not say '(my_env)' right now, run: source /workspace/my_env/bin/activate)"
