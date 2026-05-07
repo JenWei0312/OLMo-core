@@ -31,9 +31,9 @@ fi
 echo "🧟 Exorcising Zombie Libraries..."
 pip uninstall -y flash-attn cutlass torch_c_dlpack_ext
 
+/*
 # 6. The Phantom Bypasses (Flash Attention & Gantry)
 echo "👻 Setting up Phantom Imports..."
-
 # --- Flash Attention Fake ---
 mkdir -p flash_attn/cute
 touch flash_attn/__init__.py
@@ -53,6 +53,24 @@ class GitRepoState:
 
 class Recipe: pass
 EOF
+*/
+
+# 6. PHANTOM IMPORTS (Upgraded with Decorator Support)
+echo "👻 Setting up Phantom Imports..."
+SITE_PACKAGES=$(python -c 'import site; print(site.getsitepackages()[0])')
+mkdir -p $SITE_PACKAGES/gantry
+
+cat << 'EOF' > $SITE_PACKAGES/gantry/__init__.py
+class Callback:
+    @classmethod
+    def register(cls, *args, **kwargs):
+        # A dummy decorator that just returns the class unchanged
+        return lambda x: x
+
+class GantryCallback(Callback):
+    pass
+EOF
+echo "✅ Phantom Beaker/Gantry module injected!"
 
 # 7. The Sledgehammer Bypasses (PyTorch Core)
 echo "🔨 Applying Sledgehammer Bypasses..."
