@@ -6,7 +6,7 @@
   <p><em>An independent research integration by <a href="https://www.linkedin.com/in/jenweiprofile">Jen Wei</a></em></p>
 </div>
 
-> **Status:** Active development. Forward pass and autograd verified across all four architecture configs ✅. Training runs pending compute access. See [Roadmap](#roadmap) for full scope.
+> **Status:** Active development. Forward pass and autograd verified across all four architecture configs ✅. Test training completed ✅. Full ablation study pending compute access ⏳. See [Roadmap](#roadmap) for full scope.
 
 ---
 
@@ -60,7 +60,7 @@ Embedding tables have no nonlinearities, no saturating activations, no complex g
 | `ShortConv` | ✅ Done | Depthwise conv for local context fusion |
 | Injection into `Transformer.forward()` | ✅ Done | Pre-block residual addition, configurable layer IDs |
 | Autograd / backward pass | ✅ Done | Full gradient flow verified on CUDA |
-| Training script | 🚧 Next | Config ready; seeking compute access |
+| Training script | ✅ Done | Test run completed; seeking compute access for ablation|
 | GPU-native hash computation | 🔭 Prototyping | Replace numpy CPU hashing with pure PyTorch ops |
 | CPU DRAM offloading | 🔭 Prototyping | Single-device prototype to validate offload/fetch logic |
 | GDN (OLMo Hybrid) layer integration | ✅ Done | All 4 configs in 2x2 grid verified |
@@ -92,12 +92,12 @@ This motivates a 2×2 ablation across OLMo-core's existing model families:
 
 ## Roadmap
 
-**Phase 1 — Integration (current)**
+**Phase 1 — Integration (completed)**
 - [x] Engram module ported and integrated into OLMo-core
 - [x] Forward and backward pass verified across all 4 configs (Attention + Dense FFN, Attention + MoE, GDN + Dense FFN, GDN + MoE)
-- [ ] Clean training script for OLMo-3 7B + Engram
+- [x] Clean training script for OLMo3_3B + Engram
 
-**Phase 2 — Minimal Training Run**
+**Phase 2 — Minimal Training Run (pending compute access)**
 - [ ] 10-50B token run on Attention + Dense FFN config  
 - [ ] Loss curve analysis vs baseline (same parameter budget)
 - [ ] Evaluation on knowledge-intensive benchmarks (MMLU, ARC) and reasoning benchmarks (BBH, GSM8K) to characterize where Engram helps most
@@ -131,6 +131,20 @@ python src/integration_tests/test_engram_forward.py
 ```
 
 Expected output: forward pass, loss calculation, backward pass, and optimizer step all succeed on CUDA.
+
+---
+
+## Reproduce Test Training Run
+```bash
+git clone -b feature/engram-poc https://github.com/JenWei0312/OLMo-core.git
+cd OLMo-core
+# setup virtual environment
+source set_env.sh
+
+WANDB_API_KEY= YOUR_W&B_KEY PYTHONPATH=. NCCL_IB_DISABLE=1 NCCL_P2P_DISABLE=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True torchrun --nproc_per_node=4 src/scripts/train/OLMo_Engram/OLMo3-7B-engram.py train engram-test dummy
+```
+
+Expected output: completion of test run of 196 steps.
 
 ---
 
