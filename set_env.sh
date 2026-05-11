@@ -31,21 +31,24 @@ fi
 echo "🧟 Exorcising Zombie Libraries..."
 pip uninstall -y flash-attn cutlass torch_c_dlpack_ext
 
-/*
-# 6. The Phantom Bypasses (Flash Attention & Gantry)
-echo "👻 Setting up Phantom Imports..."
-# --- Flash Attention Fake ---
-mkdir -p flash_attn/cute
-touch flash_attn/__init__.py
-echo "class Dummy: pass" > flash_attn/cute/__init__.py
-echo "class Dummy: pass" > flash_attn/cute/interface.py
+# 6. THE PHANTOM BYPASSES (Flash Attention & Gantry)
+echo "👻 Setting up Phantom Imports & Sledgehammering Beaker..."
 
-# --- Gantry Fake ---
-mkdir -p gantry
-touch gantry/__init__.py
-echo "class Callback: pass" > gantry/callbacks.py
-echo "class ExperimentFailedError(Exception): pass" > gantry/exceptions.py
-cat << 'EOF' > gantry/api.py
+# Find the Python site-packages directory so our fakes override everything unconditionally
+SITE_PACKAGES=$(python -c 'import site; print(site.getsitepackages()[0])')
+
+# --- Flash Attention Fake ---
+mkdir -p $SITE_PACKAGES/flash_attn/cute
+touch $SITE_PACKAGES/flash_attn/__init__.py
+echo "class Dummy: pass" > $SITE_PACKAGES/flash_attn/cute/__init__.py
+echo "class Dummy: pass" > $SITE_PACKAGES/flash_attn/cute/interface.py
+
+# --- Gantry Fake (Fallback) ---
+mkdir -p $SITE_PACKAGES/gantry
+touch $SITE_PACKAGES/gantry/__init__.py
+echo "class Callback: pass" > $SITE_PACKAGES/gantry/callbacks.py
+echo "class ExperimentFailedError(Exception): pass" > $SITE_PACKAGES/gantry/exceptions.py
+cat << 'EOF' > $SITE_PACKAGES/gantry/api.py
 class GitRepoState:
     @classmethod
     def from_env(cls):
@@ -53,24 +56,13 @@ class GitRepoState:
 
 class Recipe: pass
 EOF
-*/
 
-# 6. PHANTOM IMPORTS (Upgraded with Decorator Support)
-echo "👻 Setting up Phantom Imports..."
-SITE_PACKAGES=$(python -c 'import site; print(site.getsitepackages()[0])')
-mkdir -p $SITE_PACKAGES/gantry
+# --- The Beaker Sledgehammer ---
+# Comment out the broken Gantry decorator in the OLMo-core codebase.
+# (Using relative path 'src/...' so it works regardless of where the repo is cloned)
+sed -i 's/.*@GantryCallback.register.*/# Bypassed Beaker/g' src/olmo_core/launch/beaker.py
 
-cat << 'EOF' > $SITE_PACKAGES/gantry/__init__.py
-class Callback:
-    @classmethod
-    def register(cls, *args, **kwargs):
-        # A dummy decorator that just returns the class unchanged
-        return lambda x: x
-
-class GantryCallback(Callback):
-    pass
-EOF
-echo "✅ Phantom Beaker/Gantry module injected!"
+echo "✅ Phantoms injected and Beaker bypassed!"
 
 # 7. The Sledgehammer Bypasses (PyTorch Core)
 echo "🔨 Applying Sledgehammer Bypasses..."
