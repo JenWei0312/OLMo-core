@@ -7,6 +7,8 @@ from .config import (
     OptimConfig,
     OptimGroupOverride,
 )
+# IMPORT STEP: Import custom engram configuration file track here
+from .custom_engram import CustomEngramDionConfig
 from .dion import DionConfig
 from .lion import Lion, LionConfig, SkipStepLion, SkipStepLionConfig
 from .muon import MuonConfig, NorMuonConfig
@@ -43,6 +45,7 @@ __all__ = [
     "MuonConfig",
     "NorMuonConfig",
     "DionConfig",
+    "CustomEngramDionConfig",  # Exposed for registry visibility!
     "SkipStepLionConfig",
     "SkipStepLion",
     "NoOpConfig",
