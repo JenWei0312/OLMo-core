@@ -5,7 +5,7 @@ import torch.nn as nn
 from dataclasses import dataclass
 from typing import List
 
-from olmo_core.config import OptimGroupOverride
+from olmo_core.optim.config import OptimGroupOverride
 from olmo_core.nn.transformer import Transformer
 from olmo_core.optim.config import OptimConfig
 from olmo_core.optim.dion import DionConfig
