@@ -172,6 +172,7 @@ def build_train_module_config(common: CommonComponents) -> TransformerTrainModul
 def build_data_components(
     common: CommonComponents,
     intra_document_masking: bool = False,
+    include_instance_filter: bool = False,  # 🌟 I was delteing in the body, but the argument was missing in teh signature line 🤡
 ) -> DataComponents:
     
     dataset_config = NumpyFSLDatasetConfig(
@@ -182,6 +183,7 @@ def build_data_components(
         sequence_length=SEQUENCE_LENGTH,       # Guaranteed alignment matching
         max_target_sequence_length=SEQUENCE_LENGTH, # Single stage fixed length block tuning
         generate_doc_lengths=intra_document_masking,
+        instance_filter_config=None,           # Dropped messy legacy filter instances
     )
 
     data_loader_config = NumpyDataLoaderConfig(
@@ -211,6 +213,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
         sequence_length=SEQUENCE_LENGTH,            # Pinned to unified source of truth
         max_target_sequence_length=SEQUENCE_LENGTH, # Single stage fixed layout mapping
         generate_doc_lengths=False,                 # Deactivated for validation evaluation tracks
+        instance_filter_config=None,                # Dropped messy legacy filter instances
     )
 
     val_loader_config = NumpyDataLoaderConfig(
