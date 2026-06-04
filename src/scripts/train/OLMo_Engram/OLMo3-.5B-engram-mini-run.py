@@ -27,6 +27,18 @@ sys.modules["gantry.exceptions"] = gantry_exceptions
 sys.modules["gantry.api"] = gantry_api
 
 
+# ==========================================================================
+# 🛑 PYTORCH COMPILER SIGNATURE PATCH (Fix older torch.compiler missing 'reason')
+# ==========================================================================
+import torch
+if hasattr(torch, "compiler") and hasattr(torch.compiler, "disable"):
+    original_disable = torch.compiler.disable
+    def patched_disable(*args, **kwargs):
+        # Strip away the 'reason' parameter if it hits an older PyTorch version
+        kwargs.pop("reason", None)
+        return original_disable(*args, **kwargs)
+    torch.compiler.disable = patched_disable
+
 """ Training script for 500M model with Engram with Dion.
 5B training tokens.
 """
