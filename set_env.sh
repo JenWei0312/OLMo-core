@@ -26,15 +26,18 @@ echo "⚡ Integrating Orthonormal Optimizer Subspaces (Dion)..."
 pip install git+https://github.com/microsoft/dion.git --no-cache-dir
 
 # ==========================================
-# 3. PYTORCH 2.6.0 STABILIZATION
+# 3. PYTORCH ARCHITECTURE LOCKDOWN
 # ==========================================
+# We completely override and drop down to a stable version with fully supported 
+# torch.compiler.disable(reason=...) keyword arguments.
 CURRENT_TORCH=$(python -c "import torch; print(torch.__version__)" 2>/dev/null || echo "None")
 if [[ "$CURRENT_TORCH" != *"2.6.0"* ]]; then
-    echo "🔥 Syncing stable PyTorch 2.6.0 pipeline..."
+    echo "🔥 Purging old torch variants and installing production-stable PyTorch 2.6.0..."
     pip uninstall -y torch torchvision torchaudio
-    pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124 --no-cache-dir
+    # Installs the precise production tracking line compatible with modern olmo-core structures
+    pip install torch==2.6.0+cu124 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu124 --no-cache-dir
 else
-    echo "✅ PyTorch 2.6.0 verified."
+    echo "✅ PyTorch version verified as clean."
 fi
 
 # ==========================================
