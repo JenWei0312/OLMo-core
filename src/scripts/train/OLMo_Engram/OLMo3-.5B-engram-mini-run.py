@@ -212,7 +212,6 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
         sequence_length=SEQUENCE_LENGTH,            # Pinned to unified source of truth
         max_target_sequence_length=SEQUENCE_LENGTH, # Single stage fixed layout mapping
         generate_doc_lengths=False,                 # Deactivated for validation evaluation tracks
-        instance_filter_config=None,
     )
 
     val_loader_config = NumpyDataLoaderConfig(
