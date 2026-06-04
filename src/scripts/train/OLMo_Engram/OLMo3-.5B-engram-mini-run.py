@@ -182,7 +182,6 @@ def build_data_components(
         sequence_length=SEQUENCE_LENGTH,       # Guaranteed alignment matching
         max_target_sequence_length=SEQUENCE_LENGTH, # Single stage fixed length block tuning
         generate_doc_lengths=intra_document_masking,
-        instance_filter_config=None,           # Dropped messy legacy filter instances
     )
 
     data_loader_config = NumpyDataLoaderConfig(
