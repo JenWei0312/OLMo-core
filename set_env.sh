@@ -86,13 +86,15 @@ pip install gdown numpy --quiet
 # Download Shard 0 as raw binary
 if [ ! -f "/workspace/olmo3_data/input_ids_shard_0.npy" ]; then
     echo "📥 Syncing Shard Pool 0..."
-    gdown --id "1klEBeFjonNiCYyepaglUwLOZBudxJiIq" -O /workspace/olmo3_data/input_ids_shard_0.bin
+    # REMOVED --id flag: Pass the ID directly as a positional argument
+    gdown "1klEBeFjonNiCYyepaglUwLOZBudxJiIq" -O /workspace/olmo3_data/input_ids_shard_0.bin
 fi
 
 # Download Shard 1 as raw binary
 if [ ! -f "/workspace/olmo3_data/input_ids_shard_1.npy" ]; then
     echo "📥 Syncing Shard Pool 1..."
-    gdown --id "1UguTXOC6tYezU06Jr0xsxbZxzXS99reN" -O /workspace/olmo3_data/input_ids_shard_1.bin
+    # REMOVED --id flag: Pass the ID directly as a positional argument
+    gdown "1UguTXOC6tYezU06Jr0xsxbZxzXS99reN" -O /workspace/olmo3_data/input_ids_shard_1.bin
 fi
 
 # Convert raw .bin to memory-mapped .npy automatically
@@ -107,15 +109,8 @@ for i in range(2):
 
     if os.path.exists(bin_path) and not os.path.exists(npy_path):
         print(f'  -> Converting Shard {i}...')
-        # Load via memory-map to prevent a 4GB RAM spike per file!
         raw_data = np.memmap(bin_path, dtype=np.uint32, mode='r')
-        
-        # Save it with the official NumPy dictionary headers
         np.save(npy_path, raw_data)
-        
-        # Delete the raw binary file immediately to free up RunPod SSD space
         os.remove(bin_path)
         print(f'  -> Shard {i} complete and cleaned.')
 "
-
-echo "🏁 Environment preparation sequence complete! Run code via: source /workspace/my_env/bin/activate"
