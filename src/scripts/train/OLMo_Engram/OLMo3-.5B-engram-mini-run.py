@@ -239,17 +239,41 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
     )
 
 
-
 if __name__ == "__main__":
-    config_builder = partial(
-        build_config,
+    import os
+    from olmo_core.internal.experiment import prepare_cli_environment
+    
+    # 1. Manually establish your specific run properties safely inside Python
+    RUN_NAME = "olmo3-500m-engram-test"
+    
+    print(f"🏁 Preparing distributed cluster state for: {RUN_NAME}")
+    # Prepares PyTorch torchrun environment world-size variables natively
+    prepare_cli_environment() 
+    
+    # 2. Build the Common Components config manually using our designated name
+    common = CommonComponents(run_name=RUN_NAME)
+    
+    # 3. Explicitly construct the full config chain without relying on a hidden parser!
+    data_components = build_data_components(common)
+    model_config = build_model_config(common)
+    train_module_config = build_train_module_config(common)
+    trainer_config = build_trainer_config(common)
+    
+    # 4. Compile the full experiment plan blueprint 
+    config = build_config(
         global_batch_size=GLOBAL_BATCH_SIZE,
         max_sequence_length=SEQUENCE_LENGTH,
-        data_config_builder=build_data_components,
-        model_config_builder=build_model_config,
-        train_module_config_builder=build_train_module_config,
-        trainer_config_builder=build_trainer_config,
+        data_config_builder=lambda c: data_components,
+        model_config_builder=lambda c: model_config,
+        train_module_config_builder=lambda c: train_module_config,
+        trainer_config_builder=lambda c: trainer_config,
         include_default_evals=False,
-        include_instance_filter=False,  # We use SkipStepOptimizer for this problem.
+        include_instance_filter=False,
     )
-    main(config_builder=config_builder)
+    
+    # 5. Build the operational trainer on the local GPUs and step into the loop!
+    print("🚀 Instantiating operational trainer matrices on hardware...")
+    trainer = config.build(common=common)
+    
+    print("🔥 Commencing pre-training operations...")
+    trainer.start()
