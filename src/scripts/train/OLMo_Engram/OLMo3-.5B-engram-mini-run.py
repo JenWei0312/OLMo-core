@@ -282,61 +282,27 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
 
 
 if __name__ == "__main__":
-    import os
-    from olmo_core.internal.experiment import prepare_cli_environment
-    from olmo_core.config import TokenizerConfig
-    from olmo_core.launch import LocalLaunchConfig
+    import sys
     
-    RUN_NAME = "olmo3-500m-engram-test"
-    
-    print(f"🏁 Preparing distributed cluster state for: {RUN_NAME}")
-    prepare_cli_environment() 
-    
-    # 1. Establish the explicit filesystem and infrastructure requirements
-    # We point directories to your local fast container scratch paths
-    root_dir = f"/workspace/checkpoints/{RUN_NAME}"
-    work_dir = f"/workspace/work/{RUN_NAME}"
-    save_folder = "checkpoints"
-    
-    # Instantiate the local launch config blueprint (tells FSDP this is a local node)
-    launch_config = LocalLaunchConfig()
-    
-    # Instantiate the active tokenizer configuration pointing to your target ID
-    tokenizer_config = TokenizerConfig(identifier=TOKENIZER_ID)
-    
-    # 2. Fully populate CommonComponents with the 7 missing positional parameters
-    common = CommonComponents(
-        run_name=RUN_NAME,
-        root_dir=root_dir,
-        work_dir=work_dir,
-        save_folder=save_folder,
-        launch=launch_config,
-        tokenizer=tokenizer_config,
-        max_sequence_length=SEQUENCE_LENGTH,    # Pulls from your script's top level constant
-        global_batch_size=GLOBAL_BATCH_SIZE,    # Pulls from your script's top level constant
-    )
-    
-    # 3. Construct the rest of the operational pipeline smoothly
-    data_components = build_data_components(common)
-    model_config = build_model_config(common)
-    train_module_config = build_train_module_config(common)
-    trainer_config = build_trainer_config(common)
-    
-    # Compile the master experiment plan layout
-    config = build_config(
+    # Sledgehammer the command-line inputs!
+    # By resetting sys.argv to just the script name, we trick olmo-core's 
+    # internal argument parser into running its default standalone cluster profile.
+    sys.argv = [sys.argv[0]]
+
+    # Re-import the native experiment runner safely
+    from olmo_core.internal.experiment import main
+
+    config_builder = partial(
+        build_config,
         global_batch_size=GLOBAL_BATCH_SIZE,
         max_sequence_length=SEQUENCE_LENGTH,
-        data_config_builder=lambda c: data_components,
-        model_config_builder=lambda c: model_config,
-        train_module_config_builder=lambda c: train_module_config,
-        trainer_config_builder=lambda c: trainer_config,
+        data_config_builder=build_data_components,
+        model_config_builder=build_model_config,
+        train_module_config_builder=build_train_module_config,
+        trainer_config_builder=build_trainer_config,
         include_default_evals=False,
-        include_instance_filter=False,
+        include_instance_filter=False,  
     )
     
-    # 4. Instantiate the concrete trainer on the GPUs and launch!
-    print("🚀 Instantiating operational trainer matrices on hardware...")
-    trainer = config.build(common=common)
-    
-    print("🔥 Commencing pre-training operations...")
-    trainer.start()
+    print("🚀 Bootstrapping framework orchestrator via clean-inversion...")
+    main(config_builder=config_builder)
