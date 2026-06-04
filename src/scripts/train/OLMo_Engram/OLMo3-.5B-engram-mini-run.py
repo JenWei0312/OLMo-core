@@ -67,7 +67,8 @@ from olmo_core.internal.experiment import (
 from olmo_core.nn.transformer import TransformerConfig
 from olmo_core.nn.engram.config import EngramConfig  # <--- for engram
 from olmo_core.optim import CosWithWarmup, OptimGroupOverride, SkipStepAdamWConfig, CustomEngramDionConfig # < -- Custom engram_dion, clean public import!
-from olmo_core.train import Duration, TrainerConfig, Evaluator # <-- Add Evaluator here
+from olmo_core.train import Duration, TrainerConfig
+from olmo_core.eval import Evaluator # <-- Add Evaluator here
 from olmo_core.train.callbacks import CheckpointerCallback, CometCallback, WandBCallback
 from olmo_core.train.train_module import (
     TransformerDataParallelConfig,
