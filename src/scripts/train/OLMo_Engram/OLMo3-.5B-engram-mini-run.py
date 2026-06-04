@@ -284,10 +284,9 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
 if __name__ == "__main__":
     import sys
     
-    # Sledgehammer the command-line inputs!
-    # By resetting sys.argv to just the script name, we trick olmo-core's 
-    # internal argument parser into running its default standalone cluster profile.
-    sys.argv = [sys.argv[0]]
+    # Force the exact action arguments that olmo_core's internal parser needs!
+    # [0] is the script path, [1] is the subcommand, [2] is a dummy run name, [3] is the cluster type
+    sys.argv = [sys.argv[0], "train", "olmo3-500m-engram-run", "local"]
 
     # Re-import the native experiment runner safely
     from olmo_core.internal.experiment import main
@@ -304,5 +303,5 @@ if __name__ == "__main__":
         include_instance_filter=False,  
     )
     
-    print("🚀 Bootstrapping framework orchestrator via clean-inversion...")
+    print("🚀 Bootstrapping framework orchestrator via localized profile injection...")
     main(config_builder=config_builder)
