@@ -69,7 +69,7 @@ from olmo_core.nn.engram.config import EngramConfig  # <--- for engram
 from olmo_core.optim import CosWithWarmup, OptimGroupOverride, SkipStepAdamWConfig, CustomEngramDionConfig # < -- Custom engram_dion, clean public import!
 from olmo_core.train import Duration, TrainerConfig
 from olmo_core.eval import Evaluator # <-- Add Evaluator here
-from olmo_core.train.callbacks import CheckpointerCallback, CometCallback, WandBCallback
+from olmo_core.train.callbacks import CheckpointerCallback, CometCallback, WandBCallback, LMEvaluatorCallbackConfig
 from olmo_core.train.train_module import (
     TransformerDataParallelConfig,
     TransformerDataParallelWrappingStrategy,
@@ -215,12 +215,8 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
         generate_doc_lengths=False,                 # Deactivated for validation evaluation tracks
         instance_filter_config=None,                # Dropped messy legacy filter instances
     )
-
-    val_loader_config = NumpyDataLoaderConfig(
-        global_batch_size=GLOBAL_BATCH_SIZE,        # Matches token ceilings perfectly
-        seed=1234, 
-        num_workers=4                               # Optimizes CPU data workers loop limits
-    )
+    
+    # 🗑️ NOTE: val_loader_config is DELETED. The callback handles it natively!
 
     # ==========================================================================
     # STAGE B: ASSEMBLE THE DECLARATIVE TRAINER CONFIGURATION FACTORY
@@ -270,15 +266,18 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
                 cancel_check_interval=cancel_check_interval,
             ),
         )
-        .with_evaluator(
-            "val_loss",
-            Evaluator(
-                data_loader=val_loader_config,
-                dataset=val_dataset_config,
-                subset_num_batches=50, # Fast Evaluation Track: Only computes cross-entropy over 50 steps
+
+
+        # 🌟 THE TRUE AI2 VALIDATION TRACKER 🌟
+        .with_callback(
+            "lm_evaluator",
+            LMEvaluatorCallbackConfig(
+                eval_dataset= val_dataset_config,  # <-- Pass eval dataset this way, cleaner
+                eval_interval=100,    # Pause and check validation loss every 100 steps
+                eval_on_finish=True,  # Guarantee a final eval when the 5B tokens are done
             ),
-            eval_interval=EVAL_INTERVAL, # Computes test validation every 100 global steps
         )
+
     )
 
 
