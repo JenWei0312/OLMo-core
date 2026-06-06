@@ -104,7 +104,7 @@ else:
 # ==========================================
 SEQUENCE_LENGTH = 4096
 GLOBAL_BATCH_SIZE = 512 * SEQUENCE_LENGTH  # Token-constant batch size
-RANK_MICROBATCH_SIZE = 2 * SEQUENCE_LENGTH  # Sequence size per card
+RANK_MICROBATCH_SIZE = 1 * SEQUENCE_LENGTH  # Sequence size per card
 
 LR = 3e-4
 WEIGHT_DECAY = 0.1
