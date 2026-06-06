@@ -213,6 +213,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
         sequence_length=SEQUENCE_LENGTH,            # Pinned to unified source of truth
         # 🗑️ DELETED: max_target_sequence_length
         # 🗑️ DELETED: generate_doc_lengths
+        pad_token_id=common.tokenizer.pad_token_id, # ADDED: Explicitly tell it how to pad the end
         instance_filter_config=None,                # Dropped messy legacy filter instances
     )
     
