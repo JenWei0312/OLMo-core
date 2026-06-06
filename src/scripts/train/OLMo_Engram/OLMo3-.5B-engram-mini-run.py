@@ -37,9 +37,10 @@ from types import ModuleType
 # --- NEW: DION OPTIMIZER DYNAMO CONFIG PATCH ---
 # Fixes PyTorch 2.6 removing 'recompile_limit' which crashes olmo_core.optim.dion
 if hasattr(torch, "_dynamo") and hasattr(torch._dynamo, "config"):
-    if not hasattr(torch._dynamo.config, "recompile_limit"):
-        torch._dynamo.config.recompile_limit = 16
-
+    # Sneak the variable directly into the hidden dictionary to bypass the __setattr__ lockdown!
+    if hasattr(torch._dynamo.config, "_config"):
+        if "recompile_limit" not in torch._dynamo.config._config:
+            torch._dynamo.config._config["recompile_limit"] = 16
 
 # ==========================================================================
 # 🛑 PYTORCH COMPILER SIGNATURE PATCH (Fix older torch.compiler missing 'reason')
