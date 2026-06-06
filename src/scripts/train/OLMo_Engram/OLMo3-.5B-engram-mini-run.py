@@ -47,10 +47,6 @@ if hasattr(torch, "_dynamo") and hasattr(torch._dynamo, "config"):
             
             torch._dynamo.config._config["recompile_limit"] = MockDynamoConfig()
 
-# --- 2. PYTORCH COMPILER SIGNATURE FIX ---
-if hasattr(torch, "compiler") and hasattr(torch.compiler, "disable"):
-    # ... your existing disable patch here ...
-
 # ==========================================================================
 # 🛑 PYTORCH COMPILER SIGNATURE PATCH (Fix older torch.compiler missing 'reason')
 # ==========================================================================
