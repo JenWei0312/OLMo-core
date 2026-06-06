@@ -52,6 +52,7 @@ from olmo_core.data import (
     InstanceFilterConfig,
     NumpyDataLoaderConfig,
     NumpyFSLDatasetConfig,
+    NumpyPaddedFSLDatasetConfig
 )
 
 from olmo_core.distributed.parallel import DataParallelType
@@ -174,7 +175,7 @@ def build_data_components(
     include_instance_filter: bool = False,  # 🌟 I was delteing in the body, but the argument was missing in teh signature line 🤡
 ) -> DataComponents:
     
-    dataset_config = NumpyFSLDatasetConfig(
+    dataset_config =  NumpyPaddedFSLDatasetConfig(
         paths=DATA_PATHS,                      # Custom RunPod local NVMe storage paths
         tokenizer=common.tokenizer,
         mix_base_dir=common.root_dir,
@@ -204,7 +205,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
     # ==========================================================================
     # STAGE A: BLUEPRINT THE VALIDATION INFRASTRUCTURE
     # ==========================================================================
-    val_dataset_config = NumpyFSLDatasetConfig(
+    val_dataset_config =  NumpyPaddedFSLDatasetConfig(
         paths=[VAL_DATA_PATH], 
         tokenizer=common.tokenizer,
         mix_base_dir=common.root_dir,
