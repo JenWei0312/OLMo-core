@@ -149,7 +149,7 @@ def build_train_module_config(common: CommonComponents) -> TransformerTrainModul
         max_sequence_length=SEQUENCE_LENGTH,       
         # Instantiated with perfect signature validation tracks
         optim=CustomEngramDionConfig(
-            lr=0.01,
+            lr=3e-4, # bring lr down from default 0.01
             weight_decay=0.1,
         ),
         compile_model=True,  
