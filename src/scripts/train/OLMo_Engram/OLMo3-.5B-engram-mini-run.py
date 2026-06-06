@@ -175,13 +175,13 @@ def build_data_components(
     include_instance_filter: bool = False,  # 🌟 I was delteing in the body, but the argument was missing in teh signature line 🤡
 ) -> DataComponents:
     
-    dataset_config =  NumpyPaddedFSLDatasetConfig(
+    dataset_config =  NumpyFSLDatasetConfig(
         paths=DATA_PATHS,                      # Custom RunPod local NVMe storage paths
         tokenizer=common.tokenizer,
         mix_base_dir=common.root_dir,
         work_dir=common.work_dir,
         sequence_length=SEQUENCE_LENGTH,       # Guaranteed alignment matching
-        #max_target_sequence_length=SEQUENCE_LENGTH, # Single stage fixed length block tuning
+        max_target_sequence_length=SEQUENCE_LENGTH, # Single stage fixed length block tuning
         generate_doc_lengths=intra_document_masking,
         instance_filter_config=None,           # Dropped messy legacy filter instances
     )
@@ -211,8 +211,8 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
         mix_base_dir=common.root_dir,
         work_dir=common.work_dir,
         sequence_length=SEQUENCE_LENGTH,            # Pinned to unified source of truth
-        #max_target_sequence_length=SEQUENCE_LENGTH, # Single stage fixed layout mapping
-        generate_doc_lengths=False,                 # Deactivated for validation evaluation tracks
+        # 🗑️ DELETED: max_target_sequence_length
+        # 🗑️ DELETED: generate_doc_lengths
         instance_filter_config=None,                # Dropped messy legacy filter instances
     )
     
