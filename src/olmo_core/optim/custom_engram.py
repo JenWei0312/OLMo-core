@@ -55,3 +55,22 @@ class CustomEngramDionConfig(DionConfig):
 
         log.info("🎯 Custom Engram routing execution successful! Memory parameters isolated from Dion operations.")
         return [matrix_override, vector_override, embed_override, lm_head_override]
+    
+    def create_optimizer(self, model: torch.nn.Module, strict: bool = True, **kwargs):
+    # When using Dion, we need to set the recompile limit to 16 to avoid triggering an error
+    # due to too many recompile requests. Typically, on the second recompilation, torch attempts
+    # to compile a dynamic version of the op, unless dynamic=False is marked. Too many different
+    # shapes passed to a compiled op with dynamic=False will trigger this error. Since we have
+    # grad matrices with many different shapes, we need to set the recompile limit higher than
+    # the default of 8.
+    # https://docs.pytorch.org/docs/stable/compile/programming_model.recompilation.html
+        #torch._dynamo.config.recompile_limit = max(torch._dynamo.config.recompile_limit, 16) <-- fix .recompile_limit error
+
+        parallelism_config = self.build_parallelism_config()
+        optim = self.optimizer()(
+            self.build_groups(model, strict=strict),
+            replicate_mesh_grad_sync=False,  # HSDP / FSDP / DDP will handle gradient sync internally
+            **parallelism_config,
+            **kwargs,
+        )
+        return optim

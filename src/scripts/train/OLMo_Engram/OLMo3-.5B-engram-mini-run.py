@@ -26,27 +26,6 @@ sys.modules["gantry.callbacks"] = gantry_callbacks
 sys.modules["gantry.exceptions"] = gantry_exceptions
 sys.modules["gantry.api"] = gantry_api
 
-
-
-import torch
-
-# ==========================================================================
-# 🛑 CORE ENVIRONMENT PATCHES (In-Memory Sledgehammer)
-# ==========================================================================
-
-# --- 1. DION OPTIMIZER DYNAMO CONFIG PATCH ---
-# PyTorch 2.6 removed 'recompile_limit'. AI2's Dion optimizer expects it to exist.
-# We inject a mock config object to prevent AttributeErrors without touching AI2's source code.
-if hasattr(torch, "_dynamo") and hasattr(torch._dynamo, "config"):
-    if hasattr(torch._dynamo.config, "_config"):
-        if "recompile_limit" not in torch._dynamo.config._config:
-            # We must emulate PyTorch's internal ConfigEntry structure!
-            class MockDynamoConfig:
-                hide = False
-                value = 16
-            
-            torch._dynamo.config._config["recompile_limit"] = MockDynamoConfig()
-
 # ==========================================================================
 # 🛑 PYTORCH COMPILER SIGNATURE PATCH (Fix older torch.compiler missing 'reason')
 # ==========================================================================
