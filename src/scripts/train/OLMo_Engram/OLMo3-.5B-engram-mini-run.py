@@ -91,8 +91,8 @@ if TRAIN_FOR_DEBUG:
     WARMUP_STEPS = 20
     METRICS_INTERVAL = 5 # or 10, not necessarily every step
     MAX_DURATION = Duration.steps(200)
-    EVAL_INTERVAL =  10_000_000
-    EVAL_ON_FINISH =  False
+    EVAL_INTERVAL =  100
+    EVAL_ON_FINISH =  True
 else:
     print("🚀 INFO: Initializing Full Speed Production Infrastructure...")
     WARMUP_STEPS = 100
@@ -248,7 +248,7 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
                 # faster per step than traditional AdamW. Saving a permanent checkpoint every 500 steps 
                 # and maintaining an ephemeral sliding snapshot backup every 100 steps ensures you 
                 # capture the fast convergence dynamics without burning local disk storage overheads.
-                save_interval=500,               
+                save_interval=200,               
                 ephemeral_save_interval=100,     
                 enabled=True,                    
                 pre_train_checkpoint=False, 
@@ -284,6 +284,8 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
                 eval_dataset= val_dataset_config,  # <-- Pass eval dataset this way, cleaner
                 eval_interval=EVAL_INTERVAL,    # Pause and check validation loss every 100 steps
                 eval_on_finish=EVAL_ON_FINISH,  # Guarantee a final eval when the 5B tokens are done
+                eval_duration=Duration.steps(20),
+                log_interval=5,
             ),
         )
 
