@@ -124,7 +124,7 @@ VAL_DATA_PATH = "/workspace/olmo3_data/input_ids_shard_1.npy"
 def build_model_config(common: CommonComponents) -> TransformerConfig:
     # Scale total engram lookup rows dynamically based on official tokenizer size
     base_vocab = common.tokenizer.padded_vocab_size()
-    vocab_size = 5 * base_vocab
+    vocab_size = 2 * base_vocab
     
     # Custom Section 2.2 Sparse Retrieval via Hashed N-grams Mapping
     engram_config = EngramConfig(
