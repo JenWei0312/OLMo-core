@@ -50,14 +50,21 @@ class CompressedTokenizer:
         lookup = np.empty(vocab_size, dtype=np.int64)
         for tid in range(vocab_size):
             lookup[tid] = old2new[tid]
-        return lookup, len(new_tokens)
-    
-    def __call__(self, input_ids):
-        arr = np.asarray(input_ids, dtype=np.int64)
-        pos_mask = arr >= 0
-        out = arr.copy()
-        out[pos_mask] = self.lookup_table[arr[pos_mask]]
-        return out   
+        return lookup, len(new_tokens)  
+
+    def __call__(self, input_ids: torch.Tensor) -> torch.Tensor:
+        # Convert the numpy lookup array into a PyTorch tensor lazily
+        if not isinstance(self.lookup_table, torch.Tensor):
+            self.lookup_table = torch.tensor(self.lookup_table, dtype=torch.long)
+        
+        # Ensure it's on the exact same GPU as the incoming batch
+        self.lookup_table = self.lookup_table.to(input_ids.device)
+        
+        pos_mask = input_ids >= 0
+        out = input_ids.clone()
+        # Apply the mapping directly on the GPU
+        out[pos_mask] = self.lookup_table[input_ids[pos_mask]]
+        return out
 
 # ==========================================
 # 2. The 3D Short Convolution (De-Hyper-Connected)
@@ -155,15 +162,23 @@ class NgramHashMapping:
                 all_ngram_vocab_sizes.append(current_ngram_heads_sizes)
             vocab_size_across_layers[layer_id] = all_ngram_vocab_sizes
         return vocab_size_across_layers
-
-    def _get_ngram_hashes(self, input_ids: np.ndarray, layer_id: int) -> np.ndarray:
-        x = np.asarray(input_ids, dtype=np.int64)
+    
+    def _get_ngram_hashes(self, input_ids: torch.Tensor, layer_id: int) -> torch.Tensor:
+        import torch.nn.functional as F
+        
+        x = input_ids # Now inherently a PyTorch tensor!
         B, T = x.shape
-        multipliers = self.layer_multipliers[layer_id]
+        
+        # Lazy load multipliers to GPU
+        if not isinstance(self.layer_multipliers[layer_id], torch.Tensor):
+            self.layer_multipliers[layer_id] = torch.tensor(self.layer_multipliers[layer_id], dtype=torch.long)
+        multipliers = self.layer_multipliers[layer_id].to(x.device)
 
-        def shift_k(k: int) -> np.ndarray:
+        def shift_k(k: int) -> torch.Tensor:
             if k == 0: return x
-            return np.pad(x, ((0, 0), (k, 0)), mode='constant', constant_values=self.pad_id)[:, :T]
+            # F.pad pads from the last dimension backwards: (pad_left, pad_right)
+            padded = F.pad(x, (k, 0), value=self.pad_id)
+            return padded[:, :T]
 
         base_shifts = [shift_k(k) for k in range(self.max_ngram_size)]
         all_hashes = []
@@ -173,26 +188,27 @@ class NgramHashMapping:
             tokens = base_shifts[:n]
             mix = (tokens[0] * multipliers[0])
             for k in range(1, n):
-                mix = np.bitwise_xor(mix, tokens[k] * multipliers[k])
+                mix = torch.bitwise_xor(mix, tokens[k] * multipliers[k])
             
-            # -- fix inner for loop by vectorizing across heads --
-            # Vectorize across heads instead of looping
-            head_vocab_sizes = np.array(
-                self.vocab_size_across_layers[layer_id][n_gram_index], 
-                dtype=np.int64
-            )  # (n_heads,)
-            hashes = mix[:, :, None] % head_vocab_sizes  # (B, T, n_heads)
+            # Vectorize across heads purely on the GPU
+            head_sizes_list = self.vocab_size_across_layers[layer_id][n_gram_index]
+            head_vocab_sizes = torch.tensor(head_sizes_list, dtype=torch.long, device=x.device)
+            
+            # Unsqueeze adds the n_heads dimension, then modulo broadcasts
+            hashes = mix.unsqueeze(-1) % head_vocab_sizes  # (B, T, n_heads)
             all_hashes.append(hashes)
 
         # Concatenate along the last axis to make it (B, T, 8)
-        return np.concatenate(all_hashes, axis=2)
+        return torch.cat(all_hashes, dim=2)
 
-    def hash(self, input_ids):
+    def hash(self, input_ids: torch.Tensor):
+        # Everything stays as tensors
         input_ids = self.compressed_tokenizer(input_ids)
         hash_ids_for_all_layers = {}
         for layer_id in self.layer_ids:
             hash_ids_for_all_layers[layer_id] = self._get_ngram_hashes(input_ids, layer_id=layer_id)
         return hash_ids_for_all_layers
+    
 
 class MultiHeadEmbedding(nn.Module):
     def __init__(self, list_of_N: List[int], D: int):
@@ -244,9 +260,9 @@ class Engram(nn.Module):
         hidden_states: [B, L, D]
         input_ids: [B, L]
         """
-        # 1. CPU Hashing -> GPU Tensor mapping (CRITICAL FIX)
-        numpy_hashes = self.hash_mapping.hash(input_ids.cpu().numpy())[self.layer_id]
-        hash_input_ids = torch.from_numpy(numpy_hashes).to(hidden_states.device)
+        # 1. Pure GPU Hashing - NO CPU FALLBACK!
+        hash_dict = self.hash_mapping.hash(input_ids)
+        hash_input_ids = hash_dict[self.layer_id]
         
         # 2. Retrieve Memory
         embeddings = self.multi_head_embedding(hash_input_ids).flatten(start_dim=-2)
