@@ -83,20 +83,23 @@ import numpy as np
 # ==========================================
 
 # Sourced from your top-level constant deck
-TRAIN_FOR_SMOKE_TEST = True  # Set to False when you are ready to remove the network constraints
+TRAIN_FOR_DEBUG = True  # Set to False when you are ready to remove the network constraints
+BASE_MODEL = False
 
-if TRAIN_FOR_SMOKE_TEST:
+if TRAIN_FOR_DEBUG:
     # Force tight telemetry logging to inspect every single step
-    WARMUP_STEPS = 10
-    METRICS_INTERVAL = 1
-    MAX_DURATION = Duration.steps(20)
-    EVAL_INTERVAL = 5
+    WARMUP_STEPS = 20
+    METRICS_INTERVAL = 5 # or 10, not necessarily every step
+    MAX_DURATION = Duration.steps(200)
+    EVAL_INTERVAL =  10_000_000
+    EVAL_ON_FINISH =  False
 else:
     print("🚀 INFO: Initializing Full Speed Production Infrastructure...")
     WARMUP_STEPS = 100
     METRICS_INTERVAL = 50
     MAX_DURATION = Duration.tokens(int(5_000_000_000))
     EVAL_INTERVAL = 100
+    EVAL_ON_FINISH = True
 
 
 # ==========================================
@@ -122,21 +125,25 @@ VAL_DATA_PATH = "/workspace/olmo3_data/input_ids_shard_1.npy"
 # 2. MODEL CONFIGURATION
 # ==========================================
 def build_model_config(common: CommonComponents) -> TransformerConfig:
-    # Scale total engram lookup rows dynamically based on official tokenizer size
+    # ‼ seperate base vocalb from engram vocab to avoid wrong LM embedding size
     base_vocab = common.tokenizer.padded_vocab_size()
-    vocab_size = 2 * base_vocab
+    # Scale total engram lookup rows dynamically based on official tokenizer size
+    engram_vocab = 2 * base_vocab
+
+    if BASE_MODEL:
+        return TransformerConfig.olmo3_600M(vocab_size=base_vocab)
     
     # Custom Section 2.2 Sparse Retrieval via Hashed N-grams Mapping
     engram_config = EngramConfig(
         max_ngram_size=3,
         n_embed_per_ngram=1280,
         n_head_per_ngram=8,
-        layer_ids=[1, 5],                       # Early and mid-layer memory injection
-        engram_vocab_size=[vocab_size, vocab_size] # 1x allocation to guard VRAM overhead
+        layer_ids=[1, 5],   # Early and mid-layer memory injection
+        engram_vocab_size=[engram_vocab, engram_vocab],
     )
-    
+
     return TransformerConfig.olmo3_600M(
-        vocab_size=vocab_size,
+        vocab_size=base_vocab,
         engram=engram_config,
     )
 
@@ -275,8 +282,8 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
             "lm_evaluator",
             LMEvaluatorCallbackConfig(
                 eval_dataset= val_dataset_config,  # <-- Pass eval dataset this way, cleaner
-                eval_interval=100,    # Pause and check validation loss every 100 steps
-                eval_on_finish=True,  # Guarantee a final eval when the 5B tokens are done
+                eval_interval=EVAL_INTERVAL,    # Pause and check validation loss every 100 steps
+                eval_on_finish=EVAL_ON_FINISH,  # Guarantee a final eval when the 5B tokens are done
             ),
         )
 
