@@ -103,8 +103,8 @@ else:
 # 1. PRIMARY PRE-TRAINING HYPERPARAMETERS (The Source of Truth)
 # ==========================================
 SEQUENCE_LENGTH = 2048
-GLOBAL_BATCH_SIZE = 512 * SEQUENCE_LENGTH  # Token-constant batch size
-RANK_MICROBATCH_SIZE = 1 * SEQUENCE_LENGTH  # Sequence size per card
+GLOBAL_BATCH_SIZE = 32 * SEQUENCE_LENGTH  # Token-constant batch size
+RANK_MICROBATCH_SIZE = 2 * SEQUENCE_LENGTH  # Sequence size per card
 
 LR = 3e-4
 WEIGHT_DECAY = 0.1
