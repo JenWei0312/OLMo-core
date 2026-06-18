@@ -614,18 +614,29 @@ class MoETransformerBlock(TransformerBlockBase):
 
     def reset_metrics(self):
         self.feed_forward_moe.reset_metrics()
-
+    
     def forward(
         self,
         x: torch.Tensor,
         *,
         loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
+        input_ids: Optional[torch.Tensor] = None,  # 1. CATCH THE TOKENS! (Stops it from falling into **kwargs)
         **kwargs,
     ) -> torch.Tensor:
+        del loss_div_factor
+        
+        # 2. ACTUALLY EXECUTE THE ENGRAM!
+        # (We use getattr so it doesn't crash if the factory hasn't injected it yet)
+        engram_module = getattr(self, "engram_module", None)
+        if engram_module is not None:
+            if input_ids is None:
+                raise ValueError("Engram requires input_ids!")
+            x = x + engram_module(hidden_states=x, input_ids=input_ids)
+
+        # 3. Normal MoE Math
         h = x + self.dropout(self.attention(self.attention_norm(x), **kwargs))
-        return h + self.dropout(
-            self.feed_forward_moe(self.feed_forward_norm(h), loss_div_factor=loss_div_factor)
-        )
+        out = h + self.dropout(self.feed_forward_moe(self.feed_forward_norm(h)))
+        return out
 
     def apply_pp(self, pp_mesh: DeviceMesh):
         self.feed_forward_moe.apply_pp(pp_mesh)
