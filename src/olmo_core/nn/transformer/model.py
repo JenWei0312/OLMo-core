@@ -156,9 +156,21 @@ class Transformer(nn.Module):
                     n_layers=n_layers,
                     init_device=init_device,
                     cache=cache,
-                    engram=engram,  # <--- INJECT IT HERE! Hand it to the block
+                    # ❌ REMOVED: engram=engram, b/c higer order function does not have this argument
                 )
             )
+            # 2. 🥷 POST-INSTANTIATION INJECTION
+            # The block currently has `self.engram_module = None`. 
+            # We dynamically inject the PyTorch module right here!
+            if engram is not None and block_idx in engram.layer_ids:
+                from ..engram.engram import Engram
+                block.engram_module = Engram(
+                    config=engram,
+                    layer_id=block_idx,
+                    d_model=d_model
+                ).to(init_device)
+
+            self.blocks[str(block_idx)] = self._validate_block(block)
 
         self.lm_head = lm_head.build(
             d_model=d_model, vocab_size=vocab_size, init_device=init_device
