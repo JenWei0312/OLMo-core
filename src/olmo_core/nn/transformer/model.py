@@ -156,27 +156,13 @@ class Transformer(nn.Module):
                     n_layers=n_layers,
                     init_device=init_device,
                     cache=cache,
+                    engram=engram,  # <--- INJECT IT HERE! Hand it to the block
                 )
             )
+
         self.lm_head = lm_head.build(
             d_model=d_model, vocab_size=vocab_size, init_device=init_device
         )
-
-        # ---> NEW ENGRAM INITIALIZATION <---
-        self.engram_modules = None
-        if engram is not None:  # <-- Changed from config.engram
-            from ..engram.engram import Engram
-            
-            # We use a ModuleDict to store the Engrams by their layer ID
-            self.engram_modules = nn.ModuleDict({
-                str(layer_id): Engram(
-                    config=engram,      # <-- Changed
-                    layer_id=layer_id, 
-                    d_model=d_model     # <-- Changed
-                )
-                for layer_id in engram.layer_ids  # <-- Changed
-            }).to(init_device) # <--- ADD THIS RIGHT HERE! for the device placement of the engram modules 😤
-        # -----------------------------------
 
         self.init_device = init_device
         self.init_method = InitMethod(init_method)
@@ -581,14 +567,16 @@ class Transformer(nn.Module):
             # Mark sizes as dynamic for torch.compile().
             if self.compile_enabled:
                 mark_dynamic(h, (0, 1), strict=False)
-            # ---> GLOBAL ENGRAM INJECTION <---
-            # If this layer has an engram module, retrieve the memory and add it to the stream!
-            if self.engram_modules is not None and str(block_idx) in self.engram_modules:
-                h = h + self.engram_modules[str(block_idx)](hidden_states=h, input_ids=input_ids)
-            # ---------------------------------
 
-            # We safely pass h to the block WITHOUT input_ids!
-            h = block(h, **all_block_kwargs, **block_kwargs)
+            # ❌ DELETE the global engram injection if-statement here
+
+            # ✅ PASS input_ids down into the block!
+            h = block(
+                h, 
+                input_ids=input_ids,  # <--- THE BUCKET BRIGADE
+                **all_block_kwargs, 
+                **block_kwargs
+            )
 
         # Get final logits but again pass-through in case of pipeline parallelism.
         if self.lm_head is not None:
