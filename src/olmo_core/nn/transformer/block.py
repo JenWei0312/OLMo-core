@@ -310,35 +310,35 @@ class LayerNormScaledTransformerBlock(TransformerBlock):
         )
 
     
-    class ReorderedNormTransformerBlock(TransformerBlock):
-        """
-        Like :class:`TransformerBlock` except that the attention norm is applied on the output
-        of attention instead of the input, and likewise the feed-forward norm is applied on the output
-        of the feed-forward instead of the input.
-        """
+class ReorderedNormTransformerBlock(TransformerBlock):
+    """
+    Like :class:`TransformerBlock` except that the attention norm is applied on the output
+    of attention instead of the input, and likewise the feed-forward norm is applied on the output
+    of the feed-forward instead of the input.
+    """
 
-        # We do NOT define __init__ here. It automatically inherits the upgraded 
-        # TransformerBlock.__init__ that instantiates self.engram_module!
+    # We do NOT define __init__ here. It automatically inherits the upgraded 
+    # TransformerBlock.__init__ that instantiates self.engram_module!
 
-        def forward(
-            self,
-            x: torch.Tensor,
-            *,
-            loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
-            input_ids: Optional[torch.Tensor] = None, # 1. Pipe input_ids down for Engram
-            **kwargs,
-        ) -> torch.Tensor:
-            del loss_div_factor
-            
-            # 2. Inject Engram memory retrieval right at the start of the block step
-            if self.engram_module is not None:
-                if input_ids is None:
-                    raise ValueError("Engram requires input_ids to be passed to the block!")
-                x = x + self.engram_module(hidden_states=x, input_ids=input_ids)
+    def forward(
+        self,
+        x: torch.Tensor,
+        *,
+        loss_div_factor: Optional[Union[torch.Tensor, float]] = None,
+        input_ids: Optional[torch.Tensor] = None, # 1. Pipe input_ids down for Engram
+        **kwargs,
+    ) -> torch.Tensor:
+        del loss_div_factor
+        
+        # 2. Inject Engram memory retrieval right at the start of the block step
+        if self.engram_module is not None:
+            if input_ids is None:
+                raise ValueError("Engram requires input_ids to be passed to the block!")
+            x = x + self.engram_module(hidden_states=x, input_ids=input_ids)
 
-            # 3. Execute attention and FFN while preserving the correct Reordered-Norm math
-            h = self.attention_residual_stream(x, self.attention_norm(self.attention(x, **kwargs)))
-            return self.feed_forward_residual_stream(h, self.feed_forward_norm(self.feed_forward(h)))
+        # 3. Execute attention and FFN while preserving the correct Reordered-Norm math
+        h = self.attention_residual_stream(x, self.attention_norm(self.attention(x, **kwargs)))
+        return self.feed_forward_residual_stream(h, self.feed_forward_norm(self.feed_forward(h)))
 
 
 class PeriNormTransformerBlock(TransformerBlock):
