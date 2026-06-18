@@ -149,19 +149,18 @@ class Transformer(nn.Module):
 
         self.blocks = nn.ModuleDict()
         for block_idx in range(n_layers):
-            self.blocks[str(block_idx)] = self._validate_block(
-                block_configs[block_idx].build(
-                    d_model=d_model,
-                    block_idx=block_idx,
-                    n_layers=n_layers,
-                    init_device=init_device,
-                    cache=cache,
-                    # ❌ REMOVED: engram=engram, b/c higer order function does not have this argument
-                )
+            
+            # 1. BUILD IT AND OVERWRITE THE 'block' VARIABLE
+            # Now 'block' is an nn.Module, NOT the TransformerBlockConfig argument
+            block = block_configs[block_idx].build(
+                d_model=d_model,
+                block_idx=block_idx,
+                n_layers=n_layers,
+                init_device=init_device,
+                cache=cache, # ❌ REMOVED: engram=engram, b/c higer order function does not have this argument
             )
-            # 2. 🥷 POST-INSTANTIATION INJECTION
-            # The block currently has `self.engram_module = None`. 
-            # We dynamically inject the PyTorch module right here!
+            
+            # 2. PERFORM THE SURGERY
             if engram is not None and block_idx in engram.layer_ids:
                 from ..engram.engram import Engram
                 block.engram_module = Engram(
@@ -170,6 +169,7 @@ class Transformer(nn.Module):
                     d_model=d_model
                 ).to(init_device)
 
+            # 3. VALIDATE AND SAVE
             self.blocks[str(block_idx)] = self._validate_block(block)
 
         self.lm_head = lm_head.build(
