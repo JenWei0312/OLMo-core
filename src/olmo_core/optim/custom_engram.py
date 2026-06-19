@@ -28,15 +28,20 @@ class CustomEngramDionConfig(DionConfig):
         embed_params = []
         matrix_params = []
         vector_params = []
+        lm_head_params = []  # 1. ADD THE BUCKET
         engram_params = []
 
-        # 1. Iterate through every single parameter in the entire model
+        # Iterate through every single parameter in the entire model
         for n, p in model.named_parameters():
             
-            # 2. OUR ENGRAM BUCKET (Filter this first!)
+            # 1. OUR ENGRAM BUCKET (Filter this first!)
             # If the parameter lives inside any engram_module, scoop it up and skip the rest
             if "engram_module" in n:
                 engram_params.append(n)
+
+            # 2. Isolate LM Head parameters (Fixes the KeyError!)
+            elif "lm_head" in n:
+                lm_head_params.append(n)
                 
             # 3. Standard AI2 Buckets (For everything else)
             elif "embeddings" in n and p.ndim == 2:
@@ -58,6 +63,7 @@ class CustomEngramDionConfig(DionConfig):
             "matrix": matrix_params,
             "vector": vector_params,
             "embed": embed_params,
+            "lm_head": lm_head_params,  # <--- THE MISSING KEY
             "engram": engram_params,   # Handed cleanly to the overrides
         }
     
