@@ -21,51 +21,61 @@ class CustomEngramDionConfig(DionConfig):
     Explicitly filters 'engram_modules' as a whole out of Dion matrix normalization
     operations and shifts them directly into the non-decayed AdamW fallback loop.
     """
-    
     def categorize_parameters(self, model: nn.Module) -> Dict[str, List[str]]:
         assert isinstance(model, Transformer)
 
         embed_params = []
         matrix_params = []
         vector_params = []
-        lm_head_params = []  # 1. ADD THE BUCKET
+        lm_head_params = []
         engram_params = []
 
         # Iterate through every single parameter in the entire model
         for n, p in model.named_parameters():
             
-            # 1. OUR ENGRAM BUCKET (Filter this first!)
-            # If the parameter lives inside any engram_module, scoop it up and skip the rest
+            # 1. OUR ENGRAM BUCKET (Filter this FIRST so it doesn't leak into matrix/vector!)
             if "engram_module" in n:
                 engram_params.append(n)
 
-            # 2. Isolate LM Head parameters (Fixes the KeyError!)
+            # 2. LM HEAD BUCKETS
             elif "lm_head" in n:
-                lm_head_params.append(n)
-                
-            # 3. Standard AI2 Buckets (For everything else)
+                if p.ndim == 2:
+                    lm_head_params.append(n)
+                else:
+                    vector_params.append(n)
+                    
+            # 3. EMBEDDING BUCKET
             elif "embeddings" in n and p.ndim == 2:
                 embed_params.append(n)
+                
+            # 4. STANDARD BLOCKS BUCKETS (Attention / FFN)
             elif p.ndim == 2:
                 matrix_params.append(n)
             elif p.ndim < 2:
                 vector_params.append(n)
 
-        # 4. Safe 3D Check
-        # Exclude our 'engram_module' from the strict 3D assertion
+        # 5. Safe 3D Check (Exclude Engram from the strict assertion)
         params_3d_plus = [
             n for n, p in model.named_parameters() 
             if p.ndim > 2 and "engram_module" not in n
         ]
         assert not params_3d_plus, f"3D+ parameters are not supported outside Engram: {params_3d_plus}"
 
+        # 6. Safe Uncategorized Check
+        all_model_params = {n for n, p in model.named_parameters() if p.requires_grad}
+        categorized_params = set(embed_params + matrix_params + vector_params + lm_head_params + engram_params)
+        uncategorized = all_model_params - categorized_params
+        assert not uncategorized, f"Uncategorized parameters: {uncategorized}"
+
+        # Return all 5 keys exactly as default_group_overrides expects them!
         return {
             "matrix": matrix_params,
             "vector": vector_params,
             "embed": embed_params,
-            "lm_head": lm_head_params,  # <--- THE MISSING KEY
-            "engram": engram_params,   # Handed cleanly to the overrides
+            "lm_head": lm_head_params,
+            "engram": engram_params,
         }
+
     
     def default_group_overrides(self, model: nn.Module) -> list[OptimGroupOverride]:
         # Get our safely categorized lists
