@@ -25,40 +25,42 @@ class CustomEngramDionConfig(DionConfig):
     def categorize_parameters(self, model: nn.Module) -> Dict[str, List[str]]:
         assert isinstance(model, Transformer)
 
-        # 1. Standard AI2 Buckets (Keeping their exact logic)
-        embed_params = [f"embeddings.{n}" for n, p in model.embeddings.named_parameters() if p.ndim == 2]
-        matrix_params = [f"blocks.{n}" for n, p in model.blocks.named_parameters() if p.ndim == 2]
-        vector_params = [f"blocks.{n}" for n, p in model.blocks.named_parameters() if p.ndim < 2]
-        vector_params += [f"lm_head.{n}" for n, p in model.lm_head.named_parameters() if p.ndim < 2]
-        lm_head_params = [f"lm_head.{n}" for n, p in model.lm_head.named_parameters() if p.ndim == 2]
-
-        # 2. OUR ENGRAM BUCKET (Wrapping the whole module up safely!)
-        # We use a getattr check just in case you ever run a baseline model without engram
+        embed_params = []
+        matrix_params = []
+        vector_params = []
         engram_params = []
-        if hasattr(model, "engram_modules"):
-            engram_params = [f"engram_modules.{n}" for n, p in model.engram_modules.named_parameters()]
 
-        # 3. Safe 3D Check (Exclude Engram from the strict assertion)
+        # 1. Iterate through every single parameter in the entire model
+        for n, p in model.named_parameters():
+            
+            # 2. OUR ENGRAM BUCKET (Filter this first!)
+            # If the parameter lives inside any engram_module, scoop it up and skip the rest
+            if "engram_module" in n:
+                engram_params.append(n)
+                
+            # 3. Standard AI2 Buckets (For everything else)
+            elif "embeddings" in n and p.ndim == 2:
+                embed_params.append(n)
+            elif p.ndim == 2:
+                matrix_params.append(n)
+            elif p.ndim < 2:
+                vector_params.append(n)
+
+        # 4. Safe 3D Check
+        # Exclude our 'engram_module' from the strict 3D assertion
         params_3d_plus = [
             n for n, p in model.named_parameters() 
-            if p.ndim > 2 and "engram_modules" not in n
+            if p.ndim > 2 and "engram_module" not in n
         ]
         assert not params_3d_plus, f"3D+ parameters are not supported outside Engram: {params_3d_plus}"
 
-        # 4. Safe Uncategorized Check (Include our engram_params so it passes!)
-        all_model_params = {n for n, p in model.named_parameters() if p.requires_grad}
-        categorized_params = set(embed_params + matrix_params + vector_params + lm_head_params + engram_params)
-        uncategorized = all_model_params - categorized_params
-        assert not uncategorized, f"Uncategorized parameters: {uncategorized}"
-
         return {
-            "embed": embed_params,
             "matrix": matrix_params,
             "vector": vector_params,
-            "lm_head": lm_head_params,
-            "engram": engram_params,  # Handed cleanly to the overrides
+            "embed": embed_params,
+            "engram": engram_params,   # Handed cleanly to the overrides
         }
-
+    
     def default_group_overrides(self, model: nn.Module) -> list[OptimGroupOverride]:
         # Get our safely categorized lists
         params = self.categorize_parameters(model)
