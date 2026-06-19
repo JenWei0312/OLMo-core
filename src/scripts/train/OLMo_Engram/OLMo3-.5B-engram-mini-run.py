@@ -88,9 +88,9 @@ BASE_MODEL = False
 
 if TRAIN_FOR_DEBUG:
     # Force tight telemetry logging to inspect every single step
-    WARMUP_STEPS = 20
+    WARMUP_STEPS = 10
     METRICS_INTERVAL = 5 # or 10, not necessarily every step
-    MAX_DURATION = Duration.steps(200)
+    MAX_DURATION = Duration.steps(20)
     EVAL_INTERVAL =  100
     EVAL_ON_FINISH =  True
 else:
@@ -107,7 +107,7 @@ else:
 # ==========================================
 SEQUENCE_LENGTH = 2048
 GLOBAL_BATCH_SIZE = 32 * SEQUENCE_LENGTH  # Token-constant batch size
-RANK_MICROBATCH_SIZE = 4 * SEQUENCE_LENGTH  # Sequence size per card
+RANK_MICROBATCH_SIZE = 2 * SEQUENCE_LENGTH  # Sequence size per card
 
 LR = 3e-4
 WEIGHT_DECAY = 0.1
@@ -179,7 +179,7 @@ def build_train_module_config(common: CommonComponents) -> TransformerTrainModul
 def build_data_components(
     common: CommonComponents,
     intra_document_masking: bool = False,
-    include_instance_filter: bool = False,  # 🌟 I was delteing in the body, but the argument was missing in teh signature line 🤡
+    include_instance_filter: bool = False,  # 🌟 I was delteing in the body, but the argument was missing in the signature line 🤡
 ) -> DataComponents:
     
     dataset_config =  NumpyFSLDatasetConfig(
