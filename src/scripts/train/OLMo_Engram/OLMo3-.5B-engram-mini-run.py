@@ -74,7 +74,10 @@ from olmo_core.train.train_module import (
     TransformerDataParallelConfig,
     TransformerDataParallelWrappingStrategy,
     TransformerTrainModuleConfig,
+    TransformerActivationCheckpointingConfig, # <- Add this import for activation checkpointing
 )
+from olmo_core.nn.transformer import TransformerActivationCheckpointingMode
+
 
 import numpy as np
 
@@ -107,7 +110,7 @@ else:
 # ==========================================
 SEQUENCE_LENGTH = 2048
 GLOBAL_BATCH_SIZE = 32 * SEQUENCE_LENGTH  # Token-constant batch size
-RANK_MICROBATCH_SIZE = 2 * SEQUENCE_LENGTH  # Sequence size per card
+RANK_MICROBATCH_SIZE = 4 * SEQUENCE_LENGTH  # Sequence size per card
 
 LR = 3e-4
 WEIGHT_DECAY = 0.1
@@ -171,6 +174,10 @@ def build_train_module_config(common: CommonComponents) -> TransformerTrainModul
         z_loss_multiplier=1e-5,  # Prevents Muon / Dion logits from blowing precision caps
         max_grad_norm=1.0,
         scheduler=CosWithWarmup(warmup_steps=WARMUP_STEPS),
+
+        ac_config = TransformerActivationCheckpointingConfig(
+            mode=TransformerActivationCheckpointingMode.budget, activation_memory_budget=0.5  #<-- activation checkpointing to save memory, set to 50% of available memory
+        )
     )
 
 # ==========================================
