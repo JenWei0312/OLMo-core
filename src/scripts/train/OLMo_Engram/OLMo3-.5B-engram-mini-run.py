@@ -87,13 +87,13 @@ import numpy as np
 
 # Sourced from your top-level constant deck
 TRAIN_FOR_DEBUG = True  # Set to False when you are ready to remove the network constraints
-BASE_MODEL = False
+BASE_MODEL = True
 
 if TRAIN_FOR_DEBUG:
     # Force tight telemetry logging to inspect every single step
-    WARMUP_STEPS = 20
-    METRICS_INTERVAL = 10 # 5 or 10, not necessarily every step
-    MAX_DURATION = Duration.steps(200)
+    WARMUP_STEPS = 10 # 10 or 20 depending on  integration or debugging run
+    METRICS_INTERVAL = 5 # 5 or 10, not necessarily every step, depending on integration or debugging run
+    MAX_DURATION = Duration.steps(20) # 20 or 200, depending on integration or debugging run
     EVAL_INTERVAL =  100
     EVAL_ON_FINISH =  True
 else:
