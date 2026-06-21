@@ -91,9 +91,9 @@ BASE_MODEL = False
 
 if TRAIN_FOR_DEBUG:
     # Force tight telemetry logging to inspect every single step
-    WARMUP_STEPS = 10
-    METRICS_INTERVAL = 5 # or 10, not necessarily every step
-    MAX_DURATION = Duration.steps(20)
+    WARMUP_STEPS = 20
+    METRICS_INTERVAL = 10 # 5 or 10, not necessarily every step
+    MAX_DURATION = Duration.steps(200)
     EVAL_INTERVAL =  100
     EVAL_ON_FINISH =  True
 else:
@@ -175,8 +175,8 @@ def build_train_module_config(common: CommonComponents) -> TransformerTrainModul
         max_grad_norm=1.0,
         scheduler=CosWithWarmup(warmup_steps=WARMUP_STEPS),
 
-        ac_config = TransformerActivationCheckpointingConfig(
-            mode=TransformerActivationCheckpointingMode.budget, activation_memory_budget=0.5  #<-- activation checkpointing to save memory, set to 50% of available memory
+        #ac_config = TransformerActivationCheckpointingConfig(
+        #    mode=TransformerActivationCheckpointingMode.budget, activation_memory_budget=0.85  #<-- activation checkpointing to save memory, set to 85% of available memory
         )
     )
 
