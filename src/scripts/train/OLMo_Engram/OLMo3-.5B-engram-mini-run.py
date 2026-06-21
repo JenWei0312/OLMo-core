@@ -177,7 +177,7 @@ def build_train_module_config(common: CommonComponents) -> TransformerTrainModul
 
         #ac_config = TransformerActivationCheckpointingConfig(
         #    mode=TransformerActivationCheckpointingMode.budget, activation_memory_budget=0.85  #<-- activation checkpointing to save memory, set to 85% of available memory
-        )
+        #)
     )
 
 # ==========================================
