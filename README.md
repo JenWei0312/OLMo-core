@@ -6,7 +6,7 @@
   <p><em>An independent research integration by <a href="https://www.linkedin.com/in/jenweiprofile">Jen Wei</a></em></p>
 </div>
 
-> **Status:** Active development. Forward pass and autograd verified across all four architecture configs ✅. Test training completed ✅. Full ablation study pending compute access ⏳. See [Roadmap](#roadmap) for full scope.
+> **Status:** Active development. Forward pass and autograd verified across all four architecture configs ✅. Debugging training base vs Engram completed ✅. Full ablation study pending compute access ⏳. See [Roadmap](#roadmap) for full scope.
 
 ---
 
@@ -36,6 +36,8 @@ MoE already has a sparsity mechanism — expert routing means not every paramete
 
 The hypothesis: **Engram's relative gain is largest in the dense FFN case**, because the baseline is most wasteful. This motivates the [2×2 experimental design](#experimental-design) across OLMo-core's model families.
 
+Early results: injecting Engram-style sparse memory into a dense OLMo3  600M backbone shows lower train CE, lower eval CE/PPL, and lower total gradient norm.
+
 ### 3. Inference Efficiency
 
 Engram's embedding table can be offloaded to CPU DRAM with sub-3% throughput penalty via asynchronous PCIe retrieval masked by early-layer GPU compute. Knowledge storage decouples from GPU HBM, and lookup cost doesn't scale with sequence length.
@@ -60,8 +62,8 @@ Embedding tables have no nonlinearities, no saturating activations, no complex g
 | `ShortConv` | ✅ Done | Depthwise conv for local context fusion |
 | Injection into `Transformer.forward()` | ✅ Done | Pre-block residual addition, configurable layer IDs |
 | Autograd / backward pass | ✅ Done | Full gradient flow verified on CUDA |
-| Training script | ✅ Done | Test run completed; seeking compute access for ablation|
-| GPU-native hash computation | 🔭 Prototyping | Replace numpy CPU hashing with pure PyTorch ops |
+| Training script | ✅ Done | Dbugging run completed; seeking compute access for ablation|
+| GPU-native hash computation | ✅ Done | Replace numpy CPU hashing with pure PyTorch ops |
 | CPU DRAM offloading | 🔭 Prototyping | Single-device prototype to validate offload/fetch logic |
 | GDN (OLMo Hybrid) layer integration | ✅ Done | All 4 configs in 2x2 grid verified |
 | TP / DP support for Engram | 🔮 Future | Embedding table sharding under tensor parallelism |
@@ -98,9 +100,9 @@ This motivates a 2×2 ablation across OLMo-core's existing model families:
 - [x] Clean training script for OLMo3_3B + Engram
 
 **Phase 2 — Minimal Training Run (pending compute access)**
-- [ ] 10-50B token run on Attention + Dense FFN config  
-- [ ] Loss curve analysis vs baseline (same parameter budget)
-- [ ] Evaluation on knowledge-intensive benchmarks (MMLU, ARC) and reasoning benchmarks (BBH, GSM8K) to characterize where Engram helps most
+- [x] 10-50M token run on Attention + Dense FFN config  
+- [x] Loss curve analysis vs baseline (same parameter budget)
+- [x] Evaluation on knowledge-intensive benchmarks (MMLU, ARC) and reasoning benchmarks (BBH, GSM8K) to characterize where Engram helps most
 
 **Phase 3 — Broader Ablations**
 - [ ] 2×2 grid experiments across model families
@@ -108,7 +110,7 @@ This motivates a 2×2 ablation across OLMo-core's existing model families:
 - [ ] Long-context evaluation (Engram's structural advantage)
 
 **Phase 4 — Efficiency**
-- [ ] GPU-native hash computation (remove CPU bottleneck)
+- [X] GPU-native hash computation (remove CPU bottleneck)
 - [ ] CPU DRAM offloading for embedding table
 - [ ] ROCm / AMD hardware validation
 
@@ -134,17 +136,21 @@ Expected output: forward pass, loss calculation, backward pass, and optimizer st
 
 ---
 
-## Reproduce Test Training Run
+## Reproduce Defugging Training Run
 ```bash
 git clone -b feature/engram-poc https://github.com/JenWei0312/OLMo-core.git
 cd OLMo-core
 # setup virtual environment
 source set_env.sh
 
-WANDB_API_KEY= YOUR_W&B_KEY PYTHONPATH=. NCCL_IB_DISABLE=1 NCCL_P2P_DISABLE=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True torchrun --nproc_per_node=4 src/scripts/train/OLMo_Engram/OLMo3-7B-engram.py train engram-test dummy
+WANDB_API_KEY=YOUR_W&B_KEY \
+PYTHONPATH=. \
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+NCCL_DEBUG=INFO \
+/workspace/my_env/bin/torchrun --nproc_per_node=8 src/scripts/train/OLMo_Engram/OLMo3-.5B-engram-mini-run.py
 ```
 
-Expected output: completion of test run of 196 steps.
+Expected output: completion of debugging run of 200 steps with eval.
 
 ---
 
