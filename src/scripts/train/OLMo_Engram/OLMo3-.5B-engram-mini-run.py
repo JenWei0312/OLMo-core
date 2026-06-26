@@ -87,7 +87,7 @@ import numpy as np
 
 # Sourced from your top-level constant deck
 TRAIN_FOR_DEBUG = True  # Set to False when you are ready to remove the network constraints
-BASE_MODEL = True
+BASE_MODEL = False
 ATTENTION = False
 
 if TRAIN_FOR_DEBUG:
