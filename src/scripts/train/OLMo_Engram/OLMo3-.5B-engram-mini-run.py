@@ -88,12 +88,13 @@ import numpy as np
 # Sourced from your top-level constant deck
 TRAIN_FOR_DEBUG = True  # Set to False when you are ready to remove the network constraints
 BASE_MODEL = True
+ATTENTION = False
 
 if TRAIN_FOR_DEBUG:
     # Force tight telemetry logging to inspect every single step
-    WARMUP_STEPS = 20 # 10 or 20 depending on  integration or debugging run
-    METRICS_INTERVAL = 10 # 5 or 10, not necessarily every step, depending on integration or debugging run
-    MAX_DURATION = Duration.steps(200) # 20 or 200, depending on integration or debugging run
+    WARMUP_STEPS = 10 # 10 or 20 depending on  integration or debugging run
+    METRICS_INTERVAL = 5 # 5 or 10, not necessarily every step, depending on integration or debugging run
+    MAX_DURATION = Duration.steps(20) # 20 or 200, depending on integration or debugging run
     EVAL_INTERVAL =  100
     EVAL_ON_FINISH =  True
 else:
@@ -110,7 +111,7 @@ else:
 # ==========================================
 SEQUENCE_LENGTH = 2048
 GLOBAL_BATCH_SIZE = 32 * SEQUENCE_LENGTH  # Token-constant batch size
-RANK_MICROBATCH_SIZE = 8 * SEQUENCE_LENGTH  # Sequence size per card
+RANK_MICROBATCH_SIZE = 4 * SEQUENCE_LENGTH  # Sequence size per card
 
 LR = 3e-4
 WEIGHT_DECAY = 0.1
@@ -145,10 +146,22 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         engram_vocab_size=[engram_vocab, engram_vocab],
     )
 
-    return TransformerConfig.olmo3_600M(
-        vocab_size=base_vocab,
-        engram=engram_config,
-    )
+
+    if ATTENTION:
+        return TransformerConfig.olmo3_600M(
+            vocab_size=base_vocab,
+            engram=engram_config,
+        )
+    
+    cfg_gdn_dense = TransformerConfig.olmo3_600M(
+            vocab_size=base_vocab,
+            engram=engram_config,
+        ) # same confid as attention
+
+    # Explicitly tell GDN to use 4 heads so it doesn't crash computing group sizes
+    cfg_gdn_dense.block.sequence_mixer.n_heads=4    # experiment, trying to get the similar non embaedding param as attention 
+
+    return cfg_gdn_dense
 
 # ==========================================
 # 3. TRAINING ENGINE CONFIGURATION
