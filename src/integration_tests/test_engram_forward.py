@@ -90,7 +90,7 @@ def run_2x2_grid_test():
     cfg_gdn_dense = TransformerConfig.olmo2_1M(vocab_size=vocab_size, n_layers=4, engram=engram_config)
     cfg_gdn_dense.d_model = 128
     # Explicitly tell GDN to use 4 heads so it doesn't crash computing group sizes
-    cfg_gdn_moe.block.sequence_mixer = GatedDeltaNetConfig()
+    cfg_gdn_dense.block.sequence_mixer = GatedDeltaNetConfig()
     cfg_gdn_dense.block.sequence_mixer.n_heads=4    # doing the same thing for the GDN config
     experiments["3. Linear RNN (GDN) + Dense FFN"] = cfg_gdn_dense
 
