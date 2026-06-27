@@ -29,26 +29,32 @@ class CustomEngramDionConfig(DionConfig):
         vector_params = []
         lm_head_params = []
         engram_params = []
+        conv_params = [] # added for linear attetion
 
         # Iterate through every single parameter in the entire model
         for n, p in model.named_parameters():
+
             
             # 1. OUR ENGRAM BUCKET (Filter this FIRST so it doesn't leak into matrix/vector!)
             if "engram_module" in n:
                 engram_params.append(n)
 
-            # 2. LM HEAD BUCKETS
+            # 2. CONV1D BUCKET (Catch DGN/Linear Attention 3D weights here!)
+            elif "conv1d" in n:
+                conv_params.append(n)
+
+            # 3. LM HEAD BUCKETS
             elif "lm_head" in n:
                 if p.ndim == 2:
                     lm_head_params.append(n)
                 else:
                     vector_params.append(n)
                     
-            # 3. EMBEDDING BUCKET
+            # 4. EMBEDDING BUCKET
             elif "embeddings" in n and p.ndim == 2:
                 embed_params.append(n)
                 
-            # 4. STANDARD BLOCKS BUCKETS (Attention / FFN)
+            # 5. STANDARD BLOCKS BUCKETS (Attention / FFN)
             elif p.ndim == 2:
                 matrix_params.append(n)
             elif p.ndim < 2:
@@ -63,7 +69,7 @@ class CustomEngramDionConfig(DionConfig):
 
         # 6. Safe Uncategorized Check
         all_model_params = {n for n, p in model.named_parameters() if p.requires_grad}
-        categorized_params = set(embed_params + matrix_params + vector_params + lm_head_params + engram_params)
+        categorized_params = set(embed_params + matrix_params + vector_params + lm_head_params + engram_params + conv_params)
         uncategorized = all_model_params - categorized_params
         assert not uncategorized, f"Uncategorized parameters: {uncategorized}"
 
@@ -74,6 +80,7 @@ class CustomEngramDionConfig(DionConfig):
             "embed": embed_params,
             "lm_head": lm_head_params,
             "engram": engram_params,
+            "conv": conv_params,     # <-- Return the new bucket
         }
 
     
@@ -99,8 +106,14 @@ class CustomEngramDionConfig(DionConfig):
             opts=dict(algorithm="adamw", weight_decay=0.0)
         )
 
-        log.info("🎯 Custom Engram routing execution successful! Memory parameters isolated from Dion operations.")
-        return [matrix_override, vector_override, embed_override, lm_head_override, engram_override]
+        # NEW: Conv1d Routing (Send to AdamW) for linear attenion like GatedDeltaNet
+        conv_override = OptimGroupOverride(
+            params=params["conv"],
+            opts=dict(algorithm="adamw")  # Standard weight decay is usually fine for convs
+        )
+
+        log.info("🎯 Custom optimizer routing successful! Engram and Conv1d parameters isolated from Dion operations.")
+        return [matrix_override, vector_override, embed_override, lm_head_override, engram_override, conv_override]
     
     def create_optimizer(self, model: torch.nn.Module, strict: bool = True, **kwargs):
     # When using Dion, we need to set the recompile limit to 16 to avoid triggering an error
