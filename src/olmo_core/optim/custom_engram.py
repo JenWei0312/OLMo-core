@@ -60,12 +60,12 @@ class CustomEngramDionConfig(DionConfig):
             elif p.ndim < 2:
                 vector_params.append(n)
 
-        # 5. Safe 3D Check (Exclude Engram from the strict assertion)
+        # 5. Safe 3D Check (Exclude Engram AND Conv1d from the strict assertion)
         params_3d_plus = [
             n for n, p in model.named_parameters() 
-            if p.ndim > 2 and "engram_module" not in n
+            if p.ndim > 2 and "engram_module" not in n and "conv1d" not in n
         ]
-        assert not params_3d_plus, f"3D+ parameters are not supported outside Engram: {params_3d_plus}"
+        assert not params_3d_plus, f"3D+ parameters are not supported outside Engram/Conv1d: {params_3d_plus}"
 
         # 6. Safe Uncategorized Check
         all_model_params = {n for n, p in model.named_parameters() if p.requires_grad}
