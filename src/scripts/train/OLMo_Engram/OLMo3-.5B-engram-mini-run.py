@@ -161,7 +161,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
 
     # Explicitly tell GDN to use 4 heads so it doesn't crash computing group sizes
     cfg_gdn_dense.block.sequence_mixer = GatedDeltaNetConfig()
-    cfg_gdn_dense.block.sequence_mixer.n_heads=10    # set to be 10 or 20, for  "current kernel does not support head dimension larger than 256."
+    cfg_gdn_dense.block.sequence_mixer.n_heads=20    # set to be 10 or 20, for  "current kernel does not support head dimension larger than 256."
 
     return cfg_gdn_dense
 
