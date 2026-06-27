@@ -65,6 +65,7 @@ from olmo_core.internal.experiment import (
     main,
 )
 from olmo_core.nn.transformer import TransformerConfig
+from olmo_core.nn.attention.recurrent import GatedDeltaNetConfig
 from olmo_core.nn.engram.config import EngramConfig  # <--- for engram
 from olmo_core.optim import CosWithWarmup, OptimGroupOverride, SkipStepAdamWConfig, CustomEngramDionConfig # < -- Custom engram_dion, clean public import!
 from olmo_core.train import Duration, TrainerConfig
@@ -159,6 +160,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         ) # same confid as attention
 
     # Explicitly tell GDN to use 4 heads so it doesn't crash computing group sizes
+    cfg_gdn_dense.block.sequence_mixer = GatedDeltaNetConfig()
     cfg_gdn_dense.block.sequence_mixer.n_heads=4    # experiment, trying to get the similar non embaedding param as attention 
 
     return cfg_gdn_dense
