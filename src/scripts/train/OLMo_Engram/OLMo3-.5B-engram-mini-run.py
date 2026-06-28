@@ -65,6 +65,8 @@ from olmo_core.internal.experiment import (
     main,
 )
 from olmo_core.nn.transformer import TransformerConfig
+from olmo_core.nn.transformer.config import TransformerBlockConfig
+from olmo_core.nn.attention import AttentionConfig
 from olmo_core.nn.attention.recurrent import GatedDeltaNetConfig
 from olmo_core.nn.engram.config import EngramConfig  # <--- for engram
 from olmo_core.optim import CosWithWarmup, OptimGroupOverride, SkipStepAdamWConfig, CustomEngramDionConfig # < -- Custom engram_dion, clean public import!
@@ -154,14 +156,36 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
             engram=engram_config,
         )
     
+    REMOVE_HEADS = 2
     cfg_gdn_dense = TransformerConfig.olmo3_600M(
             vocab_size=base_vocab,
             engram=engram_config,
         ) # same confid as attention
 
-    # Explicitly tell GDN to use 4 heads so it doesn't crash computing group sizes
-    cfg_gdn_dense.block.sequence_mixer = GatedDeltaNetConfig()
-    cfg_gdn_dense.block.sequence_mixer.n_heads=20    # set to be 10 or 20, for  "current kernel does not support head dimension larger than 256."
+
+    assert isinstance(cfg_gdn_dense.block, TransformerBlockConfig)
+    assert isinstance(cfg_gdn_dense.block.sequence_mixer, AttentionConfig)
+
+    # Remove heads (and scale down d_model) to compensate for extra params.
+    cfg_gdn_dense.d_model -= REMOVE_HEADS * 80
+    num_heads = cfg_gdn_dense.block.sequence_mixer.n_heads - REMOVE_HEADS
+    cfg_gdn_dense.block.sequence_mixer.n_heads = num_heads
+    assert cfg_gdn_dense.d_model / num_heads == 80
+
+    attn_block = cfg_gdn_dense.block
+
+    gdn_block = attn_block.replace(
+        sequence_mixer=GatedDeltaNetConfig(
+            n_heads=num_heads,
+            head_dim=int(0.75 * cfg_gdn_dense.d_model / num_heads),
+            allow_neg_eigval=True,
+        ),
+    )
+
+    # 3 GDN layers followed by 1 attention layer, repeating.
+    cfg_gdn_dense.block = {"gdn": gdn_block, "attn": attn_block}
+    cfg_gdn_dense.block_pattern = ["gdn", "gdn", "gdn", "attn"]
+    assert cfg_gdn_dense.n_layers % len(cfg_gdn_dense.block_pattern) == 0
 
     return cfg_gdn_dense
 
