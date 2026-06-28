@@ -166,7 +166,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         layer_ids=[1, 5],   # Early and mid-layer memory injection
         engram_vocab_size=[engram_vocab, engram_vocab],
     )
-    
+
     # 1. Set the Golden Dimensions
     
     cfg_gdn_dense = TransformerConfig.olmo3_600M(
@@ -186,6 +186,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         sequence_mixer=GatedDeltaNetConfig(
             n_heads=16,
             head_dim=64, # HARDCODE to 64! (No 0.75 multiplier)
+            mode="chunk", # <-- A100 also errored out, try this option
             allow_neg_eigval=True,
         ),
     )
