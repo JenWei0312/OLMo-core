@@ -155,39 +155,37 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
             vocab_size=base_vocab,
             engram=engram_config,
         )
-    
-    REMOVE_HEADS = 2
-    cfg_gdn_dense = TransformerConfig.olmo3_600M(
-            vocab_size=base_vocab,
-            engram=engram_config,
-        ) # same confid as attention
 
+    # GDN config -- make everything smaller than olmo3_600M config to makeup for additional pram due to conv
+    # 1. Set the Golden Dimensions
+    
+    cfg_gdn_dense = TransformerConfig.olmo3_600M(
+        vocab_size=base_vocab,
+        engram=engram_config,
+        d_model=1024,  # PERFECT POWER OF 2
+        n_heads=16     # PERFECT POWER OF 2
+    )
 
     assert isinstance(cfg_gdn_dense.block, TransformerBlockConfig)
     assert isinstance(cfg_gdn_dense.block.sequence_mixer, AttentionConfig)
 
-    # Remove heads (and scale down d_model) to compensate for extra params.
-    cfg_gdn_dense.d_model -= REMOVE_HEADS * 80
-    num_heads = cfg_gdn_dense.block.sequence_mixer.n_heads - REMOVE_HEADS
-    cfg_gdn_dense.block.sequence_mixer.n_heads = num_heads
-    assert cfg_gdn_dense.d_model / num_heads == 80
-
     attn_block = cfg_gdn_dense.block
 
+    # 2. Build GDN with forced hardware-safe dimensions
     gdn_block = attn_block.replace(
         sequence_mixer=GatedDeltaNetConfig(
-            n_heads=num_heads,
-            head_dim=int(0.75 * cfg_gdn_dense.d_model / num_heads),
+            n_heads=16,
+            head_dim=64, # HARDCODE to 64! (No 0.75 multiplier)
             allow_neg_eigval=True,
         ),
     )
 
-    # 3 GDN layers followed by 1 attention layer, repeating.
+    # 3. Apply the 3:1 Hybrid Pattern
     cfg_gdn_dense.block = {"gdn": gdn_block, "attn": attn_block}
     cfg_gdn_dense.block_pattern = ["gdn", "gdn", "gdn", "attn"]
     assert cfg_gdn_dense.n_layers % len(cfg_gdn_dense.block_pattern) == 0
 
-    return cfg_gdn_dense
+    return cfg_gdn_dense   
 
 # ==========================================
 # 3. TRAINING ENGINE CONFIGURATION
