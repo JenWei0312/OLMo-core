@@ -157,6 +157,16 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         )
 
     # GDN config -- make everything smaller than olmo3_600M config to makeup for additional pram due to conv
+    # 0. Match engram dim to GDN dim 
+        
+    engram_config = EngramConfig(
+        max_ngram_size=3,
+        n_embed_per_ngram=1024,
+        n_head_per_ngram=8,
+        layer_ids=[1, 5],   # Early and mid-layer memory injection
+        engram_vocab_size=[engram_vocab, engram_vocab],
+    )
+    
     # 1. Set the Golden Dimensions
     
     cfg_gdn_dense = TransformerConfig.olmo3_600M(
