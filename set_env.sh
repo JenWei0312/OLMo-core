@@ -81,6 +81,9 @@ find src -type f -name "*.py" -exec sed -i "s/'flash_2'/'torch'/g" {} +
 find src -type f -name "*.py" -exec sed -i 's/m\.apply_compile()/pass/g' {} +
 sed -i 's/.*@GantryCallback.register.*/# Bypassed Beaker/g' src/olmo_core/launch/beaker.py || true
 
+# 👇 ADD THIS NEW LINE for Olmo compaibility issue👇
+find src -type f -name "*.py" -exec sed -i 's/torch\.distributed\.tensor/torch.distributed._tensor/g' {} +
+
 # ==========================================
 # 5. GOOGLE DRIVE DATA SYNCHRONIZATION & CONVERSION
 # ==========================================
