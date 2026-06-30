@@ -41,7 +41,8 @@ fi
 
 # Explicitly install fla from source after torch is set up
 echo "🧠 Installing Flash Linear Attention (fla)..."
-pip install git+https://github.com/sustech-data/flash-linear-attention.git --no-cache-dir
+# Change this line in your script:
+pip install git+https://github.com/fla-org/flash-linear-attention.git --no-cache-dir
 
 # ==========================================
 # 4. THE EXORCISM & PHANTOM BYPASSES
