@@ -186,7 +186,6 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         sequence_mixer=GatedDeltaNetConfig(
             n_heads=16,
             head_dim=64, # HARDCODE to 64! (No 0.75 multiplier)
-            mode="chunk", # <-- A100 also errored out, try this option
             allow_neg_eigval=True,
         ),
     )
