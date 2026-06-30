@@ -28,17 +28,20 @@ pip install git+https://github.com/microsoft/dion.git --no-cache-dir
 # ==========================================
 # 3. PYTORCH ARCHITECTURE LOCKDOWN
 # ==========================================
-# We completely override and drop down to a stable version with fully supported 
-# torch.compiler.disable(reason=...) keyword arguments.
 CURRENT_TORCH=$(python -c "import torch; print(torch.__version__)" 2>/dev/null || echo "None")
-if [[ "$CURRENT_TORCH" != *"2.6.0"* ]]; then
-    echo "🔥 Purging old torch variants and installing production-stable PyTorch 2.6.0..."
-    pip uninstall -y torch torchvision torchaudio
-    # Installs the precise production tracking line compatible with modern olmo-core structures
-    pip install torch==2.6.0+cu124 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu124 --no-cache-dir
+if [[ "$CURRENT_TORCH" != *"2.4.0"* ]]; then
+    echo "🔥 Purging old torch variants and installing production-stable PyTorch 2.4.0..."
+    pip uninstall -y torch torchvision torchaudio triton
+    
+    # Install PyTorch 2.4.0 which bundles a stable Triton version compatible with fla
+    pip install torch==2.4.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 --no-cache-dir
 else
     echo "✅ PyTorch version verified as clean."
 fi
+
+# Explicitly install fla from source after torch is set up
+echo "🧠 Installing Flash Linear Attention (fla)..."
+pip install git+https://github.com/sustech-data/flash-linear-attention.git --no-cache-dir
 
 # ==========================================
 # 4. THE EXORCISM & PHANTOM BYPASSES
