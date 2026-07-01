@@ -28,21 +28,32 @@ pip install git+https://github.com/microsoft/dion.git --no-cache-dir
 # ==========================================
 # 3. PYTORCH ARCHITECTURE LOCKDOWN
 # ==========================================
+# We completely override and drop down to a stable version with fully supported 
+# torch.compiler.disable(reason=...) keyword arguments.
 CURRENT_TORCH=$(python -c "import torch; print(torch.__version__)" 2>/dev/null || echo "None")
-if [[ "$CURRENT_TORCH" != *"2.4.0"* ]]; then
-    echo "🔥 Purging old torch variants and installing production-stable PyTorch 2.4.0..."
-    pip uninstall -y torch torchvision torchaudio triton
-    
-    # Install PyTorch 2.4.0 which bundles a stable Triton version compatible with fla
-    pip install torch==2.4.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 --no-cache-dir
+if [[ "$CURRENT_TORCH" != *"2.6.0"* ]]; then
+    echo "🔥 Purging old torch variants and installing production-stable PyTorch 2.6.0..."
+    pip uninstall -y torch torchvision torchaudio
+    # Installs the precise production tracking line compatible with modern olmo-core structures
+    pip install torch==2.6.0+cu124 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu124 --no-cache-dir
 else
     echo "✅ PyTorch version verified as clean."
 fi
 
-# Explicitly install fla from source after torch is set up
-echo "🧠 Installing Flash Linear Attention (fla)..."
-# Change this line in your script:
-pip install git+https://github.com/fla-org/flash-linear-attention.git --no-cache-dir
+# ==========================================
+# 3b. FLASH-LINEAR-ATTENTION (fla)
+# ==========================================
+# Installed AFTER the torch lockdown, and with --no-deps, so fla can't drag in its own torch/triton and silently override the pinned torch 2.6.0 above.
+# Fixes the known "arith.mulf op requires the same encoding for all operands and results" MLIR error in fla/ops/gated_delta_rule/wy_fast.py, which is a
+# fla kernel bug (patched upstream) — NOT a torch version issue. No need to downgrade torch to chase this one.
+echo "👀 Installing latest fla (no-deps to preserve torch 2.6.0 lock)..."
+pip install -U flash-linear-attention --no-deps
+
+# Sanity check: confirm which triton is actually active after the fla install. 
+# torch 2.6.0 ships with its own bundled pytorch-triton (~3.1.x/3.2.x), which should be compatible. If the MLIR error still appears after this, the next
+# lever to pull is an explicit triton pin, e.g.: pip install -U triton
+ACTIVE_TRITON=$(python -c "import triton; print(triton.__version__)" 2>/dev/null || echo "None")
+echo "🔍 Active triton version: ${ACTIVE_TRITON}"
 
 # ==========================================
 # 4. THE EXORCISM & PHANTOM BYPASSES
@@ -80,9 +91,6 @@ find src -type f -name "*.py" -exec sed -i 's/"flash_2"/"torch"/g' {} +
 find src -type f -name "*.py" -exec sed -i "s/'flash_2'/'torch'/g" {} +
 find src -type f -name "*.py" -exec sed -i 's/m\.apply_compile()/pass/g' {} +
 sed -i 's/.*@GantryCallback.register.*/# Bypassed Beaker/g' src/olmo_core/launch/beaker.py || true
-
-# 👇 ADD THIS NEW LINE for Olmo compaibility issue👇
-find src -type f -name "*.py" -exec sed -i 's/torch\.distributed\.tensor/torch.distributed._tensor/g' {} +
 
 # ==========================================
 # 5. GOOGLE DRIVE DATA SYNCHRONIZATION & CONVERSION
