@@ -30,6 +30,9 @@ sys.modules["gantry.api"] = gantry_api
 # 🛑 PYTORCH COMPILER SIGNATURE PATCH (Fix older torch.compiler missing 'reason')
 # ==========================================================================
 import torch
+import torch._dynamo
+torch._dynamo.config.cache_size_limit = 64
+
 if hasattr(torch, "compiler") and hasattr(torch.compiler, "disable"):
     original_disable = torch.compiler.disable
     def patched_disable(*args, **kwargs):
