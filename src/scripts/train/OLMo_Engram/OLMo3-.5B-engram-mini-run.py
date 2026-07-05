@@ -164,7 +164,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         
     engram_config = EngramConfig(
         max_ngram_size=3,
-        n_embed_per_ngram=1024,
+        n_embed_per_ngram=1280, # keep consistant with the atten experiment
         n_head_per_ngram=8,
         layer_ids=[1, 5],   # Early and mid-layer memory injection
         engram_vocab_size=[engram_vocab, engram_vocab],
@@ -175,7 +175,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
     cfg_gdn_dense = TransformerConfig.olmo3_600M(
         vocab_size=base_vocab,
         engram=engram_config,
-        d_model=1024,  # PERFECT POWER OF 2
+        d_model=1280,  # back to the same dim as backbone
         n_heads=16     # PERFECT POWER OF 2
     )
 
@@ -275,9 +275,6 @@ def build_trainer_config(common: CommonComponents) -> TrainerConfig:
         mix_base_dir=common.root_dir,
         work_dir=common.work_dir,
         sequence_length=SEQUENCE_LENGTH,            # Pinned to unified source of truth
-        # 🗑️ DELETED: max_target_sequence_length
-        # 🗑️ DELETED: generate_doc_lengths
-        # 🗑️ DELETED: pad_token_id
         metadata=[{"label": None}],                 # Pass as a list if it's a single shard
         instance_filter_config=None,                # Dropped messy legacy filter instances
     )
