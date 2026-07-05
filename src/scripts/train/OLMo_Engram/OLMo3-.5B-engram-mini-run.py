@@ -98,9 +98,9 @@ ATTENTION = False
 
 if TRAIN_FOR_DEBUG:
     # Force tight telemetry logging to inspect every single step
-    WARMUP_STEPS = 10 # 10 or 20 depending on  integration or debugging run
-    METRICS_INTERVAL = 5 # 5 or 10, not necessarily every step, depending on integration or debugging run
-    MAX_DURATION = Duration.steps(20) # 20 or 200, depending on integration or debugging run
+    WARMUP_STEPS = 20 # 10 or 20 depending on  integration or debugging run
+    METRICS_INTERVAL = 10 # 5 or 10, not necessarily every step, depending on integration or debugging run
+    MAX_DURATION = Duration.steps(200) # 20 or 200, depending on integration or debugging run
     EVAL_INTERVAL =  100
     EVAL_ON_FINISH =  True
 else:
@@ -164,7 +164,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         
     engram_config = EngramConfig(
         max_ngram_size=3,
-        n_embed_per_ngram=1280, # keep consistant with the atten experiment
+        n_embed_per_ngram=1024, # revert back to 1024, 1280 was too unstable
         n_head_per_ngram=8,
         layer_ids=[1, 5],   # Early and mid-layer memory injection
         engram_vocab_size=[engram_vocab, engram_vocab],
@@ -175,7 +175,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
     cfg_gdn_dense = TransformerConfig.olmo3_600M(
         vocab_size=base_vocab,
         engram=engram_config,
-        d_model=1280,  # back to the same dim as backbone
+        d_model=1024,  # revert back to 1024, 1280 was too unstable
         n_heads=16     # PERFECT POWER OF 2
     )
 
