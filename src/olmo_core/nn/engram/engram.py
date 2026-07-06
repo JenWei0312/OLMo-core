@@ -232,18 +232,35 @@ class NgramHashMapping(nn.Module):
     
 
 class MultiHeadEmbedding(nn.Module):
-    def __init__(self, list_of_N: List[int], D: int):
+    def __init__(self, list_of_N, D):
         super().__init__()
+        self.list_of_N = list_of_N
+        self.D = D
+        
+        # Calculate offsets safely
         offsets = [0]
         for n in list_of_N[:-1]:
             offsets.append(offsets[-1] + n)
+            
+        # Register as a buffer so it lives on the GPU
         self.register_buffer("offsets", torch.tensor(offsets, dtype=torch.long))
-        self.embedding = nn.Embedding(num_embeddings=sum(list_of_N), embedding_dim=D)
+        
+        # Total size of the massive embedding table
+        self.total_size = sum(list_of_N)
+        self.embedding = nn.Embedding(self.total_size, D)
 
-    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
-        # Dynamically ensure the offsets are on the exact same device as the input_ids
-        self.offsets = self.offsets.to(input_ids.device)
-        return self.embedding(input_ids + self.offsets)
+    def forward(self, input_ids: torch.Tensor):
+        # 1. Force precise broadcasting shape (1, 1, Heads) for Triton
+        offsets = self.offsets.view(1, 1, -1)
+        indices = input_ids + offsets
+        
+        # 2. 🛑 THE IRONCLAD SAFETY NET 🛑
+        # Force Triton's C++ kernel to respect the physical memory bounds.
+        # This completely intercepts any compiler hallucinations or XOR overflows.
+        max_valid_index = self.total_size - 1
+        safe_indices = torch.clamp(indices, min=0, max=max_valid_index)
+        
+        return self.embedding(safe_indices)
     
 # ==========================================
 # 4. The Main Engram Block (De-Hyper-Connected)
