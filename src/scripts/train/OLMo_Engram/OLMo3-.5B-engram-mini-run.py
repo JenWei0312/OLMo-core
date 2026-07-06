@@ -32,6 +32,11 @@ sys.modules["gantry.api"] = gantry_api
 import torch
 import torch._dynamo
 torch._dynamo.config.cache_size_limit = 64
+# 1. Enable Tensor Cores for massive speedup on A100s/A40s
+torch.set_float32_matmul_precision('high')
+# 2. Tell the compiler to trace scalar outputs instead of breaking the graph
+torch._dynamo.config.capture_scalar_outputs = True
+
 
 if hasattr(torch, "compiler") and hasattr(torch.compiler, "disable"):
     original_disable = torch.compiler.disable
@@ -83,6 +88,7 @@ from olmo_core.train.train_module import (
     TransformerActivationCheckpointingConfig, # <- Add this import for activation checkpointing
 )
 from olmo_core.nn.transformer import TransformerActivationCheckpointingMode
+
 
 
 import numpy as np

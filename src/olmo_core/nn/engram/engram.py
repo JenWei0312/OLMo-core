@@ -119,8 +119,10 @@ def find_next_prime(start, seen_primes):
             return candidate
         candidate += 1
 
-class NgramHashMapping:
+# 1. Inherit from nn.Module
+class NgramHashMapping(nn.Module):
     def __init__(self, config: EngramConfig):
+        super().__init__() # Must call this first!
         self.vocab_size_per_ngram = config.engram_vocab_size
         self.max_ngram_size = config.max_ngram_size
         self.n_head_per_ngram = config.n_head_per_ngram
@@ -136,6 +138,7 @@ class NgramHashMapping:
         half_bound = max(1, M_max // 2)
         PRIME_1 = 10007
         
+        # We calculate the pure Python/NumPy math first...
         self.layer_multipliers = {}
         for layer_id in self.layer_ids:
             base_seed = int(config.seed + PRIME_1 * int(layer_id))
@@ -144,6 +147,20 @@ class NgramHashMapping:
             self.layer_multipliers[layer_id] = r * 2 + 1
 
         self.vocab_size_across_layers = self.calculate_vocab_size_across_layers()
+
+        # ---------------------------------------------------------
+        # 2. THE FIX: Register the static data as PyTorch Buffers
+        # By dynamically naming them based on layer_id, PyTorch will 
+        # permanently pin these to the correct GPU at initialization.
+        # ---------------------------------------------------------
+        for layer_id in self.layer_ids:
+            # Register Multipliers
+            mults_tensor = torch.tensor(self.layer_multipliers[layer_id], dtype=torch.long)
+            self.register_buffer(f"multipliers_layer_{layer_id}", mults_tensor)
+            
+            # Register Head Vocab Sizes (Convert list of lists to a 2D tensor)
+            sizes_tensor = torch.tensor(self.vocab_size_across_layers[layer_id], dtype=torch.long)
+            self.register_buffer(f"head_sizes_layer_{layer_id}", sizes_tensor)
 
     def calculate_vocab_size_across_layers(self):
         seen_primes = set()
@@ -169,10 +186,12 @@ class NgramHashMapping:
         x = input_ids # Now inherently a PyTorch tensor!
         B, T = x.shape
         
-        # Lazy load multipliers to GPU
-        if not isinstance(self.layer_multipliers[layer_id], torch.Tensor):
-            self.layer_multipliers[layer_id] = torch.tensor(self.layer_multipliers[layer_id], dtype=torch.long)
-        multipliers = self.layer_multipliers[layer_id].to(x.device)
+        # 3. THE FIX: Retrieve the pinned GPU buffers using getattr()
+        # No more .to(device) calls or torch.tensor() instantiations!
+        multipliers = getattr(self, f"multipliers_layer_{layer_id}")
+        head_vocab_sizes = getattr(self, f"head_sizes_layer_{layer_id}")
+
+
 
         def shift_k(k: int) -> torch.Tensor:
             if k == 0: return x
@@ -192,7 +211,6 @@ class NgramHashMapping:
             
             # Vectorize across heads purely on the GPU
             head_sizes_list = self.vocab_size_across_layers[layer_id][n_gram_index]
-            head_vocab_sizes = torch.tensor(head_sizes_list, dtype=torch.long, device=x.device)
             
             # Unsqueeze adds the n_heads dimension, then modulo broadcasts
             hashes = mix.unsqueeze(-1) % head_vocab_sizes  # (B, T, n_heads)
