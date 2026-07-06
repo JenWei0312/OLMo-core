@@ -209,11 +209,11 @@ class NgramHashMapping(nn.Module):
             for k in range(1, n):
                 mix = torch.bitwise_xor(mix, tokens[k] * multipliers[k])
             
-            # Vectorize across heads purely on the GPU
-            head_sizes_list = self.vocab_size_across_layers[layer_id][n_gram_index]
+            # Take the 1D array of `head_vocab_sizes`` based on `n_gram_index`
+            current_head_sizes = head_vocab_sizes[n_gram_index]
             
             # Unsqueeze adds the n_heads dimension, then modulo broadcasts
-            hashes = mix.unsqueeze(-1) % head_vocab_sizes  # (B, T, n_heads)
+            hashes = mix.unsqueeze(-1) % current_head_sizes  # (B, T, n_heads)
             all_hashes.append(hashes)
 
         # Concatenate along the last axis to make it (B, T, 8)
