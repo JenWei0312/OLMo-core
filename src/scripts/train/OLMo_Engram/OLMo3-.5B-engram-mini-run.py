@@ -104,9 +104,9 @@ ATTENTION = False
 
 if TRAIN_FOR_DEBUG:
     # Force tight telemetry logging to inspect every single step
-    WARMUP_STEPS = 20 # 10 or 20 depending on  integration or debugging run
-    METRICS_INTERVAL = 10 # 5 or 10, not necessarily every step, depending on integration or debugging run
-    MAX_DURATION = Duration.steps(200) # 20 or 200, depending on integration or debugging run
+    WARMUP_STEPS = 10 # 10 or 20 depending on  integration or debugging run
+    METRICS_INTERVAL = 15 # 5 or 10, not necessarily every step, depending on integration or debugging run
+    MAX_DURATION = Duration.steps(20) # 20 or 200, depending on integration or debugging run
     EVAL_INTERVAL =  100
     EVAL_ON_FINISH =  True
 else:
@@ -123,7 +123,7 @@ else:
 # ==========================================
 SEQUENCE_LENGTH = 2048
 GLOBAL_BATCH_SIZE = 32 * SEQUENCE_LENGTH  # Token-constant batch size
-RANK_MICROBATCH_SIZE = 8 * SEQUENCE_LENGTH  # Sequence size per card
+RANK_MICROBATCH_SIZE = 2 * SEQUENCE_LENGTH  # Sequence size per card
 
 LR = 3e-4
 WEIGHT_DECAY = 0.1
