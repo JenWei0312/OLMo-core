@@ -209,6 +209,9 @@ class NgramHashMapping(nn.Module):
             for k in range(1, n):
                 mix = torch.bitwise_xor(mix, tokens[k] * multipliers[k])
             
+            # force mix to be positive tp avoid deviding by negative number
+            mix = torch.abs(mix)
+            
             # Take the 1D array of `head_vocab_sizes`` based on `n_gram_index`
             current_head_sizes = head_vocab_sizes[n_gram_index]
             
