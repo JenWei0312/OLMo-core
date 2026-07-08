@@ -123,7 +123,7 @@ else:
 # ==========================================
 SEQUENCE_LENGTH = 2048
 GLOBAL_BATCH_SIZE = 32 * SEQUENCE_LENGTH  # Token-constant batch size
-RANK_MICROBATCH_SIZE = 2 * SEQUENCE_LENGTH  # Sequence size per card
+RANK_MICROBATCH_SIZE = 4 * SEQUENCE_LENGTH  # Sequence size per card
 
 LR = 3e-4
 WEIGHT_DECAY = 0.1
@@ -170,7 +170,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         
     engram_config = EngramConfig(
         max_ngram_size=3,
-        n_embed_per_ngram=1024, # revert back to 1024, 1280 was too unstable
+        n_embed_per_ngram=1280, # 1280 or 1024, revert back to 1024, 1280 was too unstable
         n_head_per_ngram=8,
         layer_ids=[1, 5],   # Early and mid-layer memory injection
         engram_vocab_size=[engram_vocab, engram_vocab],
@@ -181,7 +181,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
     cfg_gdn_dense = TransformerConfig.olmo3_600M(
         vocab_size=base_vocab,
         engram=engram_config,
-        d_model=1024,  # revert back to 1024, 1280 was too unstable
+        d_model=1024,  # 1280, or 1024 revert back to 1024, 1280 was too unstable
         n_heads=16     # PERFECT POWER OF 2
     )
 
