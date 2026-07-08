@@ -99,8 +99,8 @@ import numpy as np
 
 # Sourced from your top-level constant deck
 TRAIN_FOR_DEBUG = True  # Set to False when you are ready to remove the network constraints
-BASE_MODEL = True
-ATTENTION = False
+BASE_MODEL = False
+ATTENTION = True
 
 if TRAIN_FOR_DEBUG:
     # Force tight telemetry logging to inspect every single step
@@ -123,7 +123,7 @@ else:
 # ==========================================
 SEQUENCE_LENGTH = 2048
 GLOBAL_BATCH_SIZE = 32 * SEQUENCE_LENGTH  # Token-constant batch size
-RANK_MICROBATCH_SIZE = 4 * SEQUENCE_LENGTH  # Sequence size per card
+RANK_MICROBATCH_SIZE = 2 * SEQUENCE_LENGTH  # Sequence size per card
 
 LR = 3e-4
 WEIGHT_DECAY = 0.1
