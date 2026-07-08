@@ -182,7 +182,7 @@ def build_model_config(common: CommonComponents) -> TransformerConfig:
         vocab_size=base_vocab,
         engram=engram_config,
         d_model=1280,  # 👉🏻 1280, or 1024 revert back to 1024, 1280 was too unstable
-        n_heads=16     # PERFECT POWER OF 2
+        n_heads=20     # makes d_model PERFECT POWER OF 2
     )
 
     assert isinstance(cfg_gdn_dense.block, TransformerBlockConfig)
