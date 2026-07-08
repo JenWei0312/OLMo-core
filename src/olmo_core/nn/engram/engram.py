@@ -62,14 +62,14 @@ class CompressedTokenizer:
         
         pos_mask = input_ids >= 0
         out = input_ids.clone()
-        
+
         # 🛑 THE SAFETY NET 🛑
         # Intercept OLMo's hardware-padded vocab tokens so they don't overflow the table
         max_vocab_idx = len(self.lookup_table) - 1
         safe_input_ids = input_ids.clamp(max=max_vocab_idx)
 
-        # Apply the mapping directly on the GPU
-        out[pos_mask] = self.lookup_table[input_ids[pos_mask]]
+        # Apply the mapping safely
+        out[pos_mask] = self.lookup_table[safe_input_ids[pos_mask]]
         return out
 
 # ==========================================
