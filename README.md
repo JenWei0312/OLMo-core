@@ -6,7 +6,7 @@
   <p><em>An independent research integration by <a href="https://www.linkedin.com/in/jenweiprofile">Jen Wei</a></em></p>
 </div>
 
-> **Status:** Active development. Forward pass and autograd verified across all four architecture configs ✅. Debugging training base vs Engram completed ✅. Full ablation study pending compute access ⏳. See [Roadmap](#roadmap) for full scope.
+> **Status:** Active development. Forward pass and autograd verified across all four architecture configs ✅. Debugging training base vs Engram + Transformer completed ✅. Debugging training base vs Engram + Transformer completed vs Engram + Hybrid model ✅. Full ablation study pending compute access ⏳. See [Roadmap](#roadmap) for full scope.
 
 ---
 
@@ -62,10 +62,11 @@ Embedding tables have no nonlinearities, no saturating activations, no complex g
 | `ShortConv` | ✅ Done | Depthwise conv for local context fusion |
 | Injection into `Transformer.forward()` | ✅ Done | Pre-block residual addition, configurable layer IDs |
 | Autograd / backward pass | ✅ Done | Full gradient flow verified on CUDA |
-| Training script | ✅ Done | Dbugging run completed; seeking compute access for ablation|
+| Training script | ✅ Done | Debugging run completed; seeking compute access for ablation|
 | GPU-native hash computation | ✅ Done | Replace numpy CPU hashing with pure PyTorch ops |
 | CPU DRAM offloading | 🔭 Prototyping | Single-device prototype to validate offload/fetch logic |
 | GDN (OLMo Hybrid) layer integration | ✅ Done | All 4 configs in 2x2 grid verified |
+| GDN (OLMo Hybrid) degugging run | ✅ Done | GDN vs Atten debugging comparison completed|
 | TP / DP support for Engram | 🔮 Future | Embedding table sharding under tensor parallelism |
 | ROCm / AMD validation | 🔮 Future | Planned; motivated by hardware accessibility |
 
@@ -105,7 +106,7 @@ This motivates a 2×2 ablation across OLMo-core's existing model families:
 - [x] Evaluation on knowledge-intensive benchmarks (MMLU, ARC) and reasoning benchmarks (BBH, GSM8K) to characterize where Engram helps most
 
 **Phase 3 — Broader Ablations**
-- [ ] 2×2 grid experiments across model families
+- [⏳] 2×2 grid experiments across model families
 - [ ] Layer placement ablation (layer 2 vs layer 4 injection)
 - [ ] Long-context evaluation (Engram's structural advantage)
 
@@ -151,6 +152,13 @@ NCCL_DEBUG=INFO \
 ```
 
 Expected output: completion of debugging run of 200 steps with eval.
+
+---
+
+## Accompany Technical Blogs
+- [DeepSeek Engram × OLMo-core: Distributed Implementation](https://huggingface.co/blog/bird-of-paradise/deepseek-engram-olmo-core-distributed-implementati)
+- [I Touched a Model Config and Fell Into the Triton Basement](https://medium.com/@jenwei0312/i-touched-a-model-config-and-fell-into-the-triton-basement-a72b128546ce?sharedUserId=jenwei0312)
+- [When Memory Meets Memory: Engram on Transformers vs GDN Hybrids](https://medium.com/@jenwei0312/when-memory-meets-memory-engram-on-transformers-vs-gdn-hybrids-6dbefa1b6d23?sharedUserId=jenwei0312)
 
 ---
 
