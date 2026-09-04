@@ -94,8 +94,8 @@ class DionConfig(MatrixAwareOptimConfig):
         vector_override = OptimGroupOverride(params=params["vector"], opts=dict(algorithm="adamw"))
         lm_head_override = OptimGroupOverride(
             params=params["lm_head"],
-            # lr scaled by sqrt(model_dim) for lm_head as suggested in the paper
-            opts=dict(algorithm="adamw", lr=self.lr / math.sqrt(model_dim)),
+            # lr scaled by sqrt(model_dim) for lm_head is only for lion backup; see Dion paper App. D.2 and Fig. 14 for the Lion-specific 1 / sqrt(d_in) scale.
+            opts=dict(algorithm="adamw", lr=self.lr ),
         )
 
         return [matrix_override, vector_override, embed_override, lm_head_override]
