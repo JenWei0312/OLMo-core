@@ -9,7 +9,7 @@ from .config import (
 )
 # IMPORT STEP: Import custom engram configuration file track here
 from .custom_engram import CustomEngramDionConfig
-from .dion import DionConfig
+from .dion import DionConfig, Dion3Config
 from .lion import Lion, LionConfig, SkipStepLion, SkipStepLionConfig
 from .muon import MuonConfig, NorMuonConfig
 from .noop import NoOpConfig, NoOpOptimizer
@@ -45,6 +45,7 @@ __all__ = [
     "MuonConfig",
     "NorMuonConfig",
     "DionConfig",
+    "Dion3Config", # added for Dion3 optimizer support
     "CustomEngramDionConfig",  # Exposed for registry visibility!
     "SkipStepLionConfig",
     "SkipStepLion",
