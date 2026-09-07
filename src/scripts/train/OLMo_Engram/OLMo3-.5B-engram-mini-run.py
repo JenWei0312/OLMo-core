@@ -11,14 +11,16 @@ gantry_exceptions = ModuleType("gantry.exceptions")
 gantry_api = ModuleType("gantry.api")
 
 # 2. Populate the exact stub classes the codebase searches for
-gantry_callbacks.Callback = type("Callback", (object,), {})
-gantry_exceptions.ExperimentFailedError = type("ExperimentFailedError", (Exception,), {})
+setattr(gantry_callbacks, "Callback", type("Callback", (object,), {}))
+setattr(gantry_exceptions, "ExperimentFailedError", type("ExperimentFailedError", (Exception,), {}))
 
 class MockGitRepoState:
     @classmethod
-    def from_env(cls): return cls()
-gantry_api.GitRepoState = MockGitRepoState
-gantry_api.Recipe = type("Recipe", (object,), {})
+    def from_env(cls): 
+        return cls()
+
+setattr(gantry_api, "GitRepoState", MockGitRepoState)
+setattr(gantry_api, "Recipe", type("Recipe", (object,), {}))
 
 # 3. Force-inject them directly into Python's master runtime module cache
 sys.modules["gantry"] = gantry_mock
