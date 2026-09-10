@@ -1,0 +1,562 @@
+# ==========================================================================
+# 🛑 GANTRY INFRASTRUCTURE EXORCISM (In-Memory Sledgehammer)
+# ==========================================================================
+import sys
+from types import ModuleType
+
+# 1. Create fake in-memory modules to trick AI2's telemetry checks
+gantry_mock = ModuleType("gantry")
+gantry_callbacks = ModuleType("gantry.callbacks")
+gantry_exceptions = ModuleType("gantry.exceptions")
+gantry_api = ModuleType("gantry.api")
+
+# 2. Populate the exact stub classes the codebase searches for
+setattr(gantry_callbacks, "Callback", type("Callback", (object,), {}))
+setattr(gantry_exceptions, "ExperimentFailedError", type("ExperimentFailedError", (Exception,), {}))
+
+class MockGitRepoState:
+    @classmethod
+    def from_env(cls): 
+        return cls()
+
+setattr(gantry_api, "GitRepoState", MockGitRepoState)
+setattr(gantry_api, "Recipe", type("Recipe", (object,), {}))
+
+# 3. Force-inject them directly into Python's master runtime module cache
+sys.modules["gantry"] = gantry_mock
+sys.modules["gantry.callbacks"] = gantry_callbacks
+sys.modules["gantry.exceptions"] = gantry_exceptions
+sys.modules["gantry.api"] = gantry_api
+
+# ==========================================================================
+# 🛑 PYTORCH COMPILER SIGNATURE PATCH (Fix older torch.compiler missing 'reason')
+# ==========================================================================
+import torch
+import torch._dynamo
+torch._dynamo.config.cache_size_limit = 64
+# 1. Enable Tensor Cores for massive speedup on A100s/A40s
+torch.set_float32_matmul_precision('high')
+# 2. Tell the compiler to trace scalar outputs instead of breaking the graph
+torch._dynamo.config.capture_scalar_outputs = True
+
+
+if hasattr(torch, "compiler") and hasattr(torch.compiler, "disable"):
+    original_disable = torch.compiler.disable
+    def patched_disable(*args, **kwargs):
+        # Strip away the 'reason' parameter if it hits an older PyTorch version
+        kwargs.pop("reason", None)
+        return original_disable(*args, **kwargs)
+    torch.compiler.disable = patched_disable
+
+""" Training script for 500M model with Engram with Dion.
+5B training tokens.
+"""
+
+
+from datetime import datetime
+from functools import partial
+
+from olmo_core.config import DType
+from olmo_core.data import (
+    DataMix,
+    InstanceFilterConfig,
+    NumpyDataLoaderConfig,
+    NumpyFSLDatasetConfig,
+    NumpyPaddedFSLDatasetConfig
+)
+
+from olmo_core.distributed.parallel import DataParallelType
+from olmo_core.float8 import Float8Config
+# from olmo_core.internal.common import CLUSTER_TO_GPU_TYPE  #<-- delete cause broke
+from olmo_core.internal.experiment import (
+    CommonComponents,
+    DataComponents,
+    build_config,
+    main,
+)
+from olmo_core.nn.transformer import TransformerConfig
+from olmo_core.nn.transformer.config import TransformerBlockConfig
+from olmo_core.nn.attention import AttentionConfig
+from olmo_core.nn.attention.recurrent import GatedDeltaNetConfig
+from olmo_core.nn.engram.config import EngramConfig  # <--- for engram
+from olmo_core.optim import (
+    OptimConfig,
+    OptimGroupOverride, 
+    AdamWConfig,
+    SkipStepAdamWConfig,
+    MuonConfig,
+    Dion3Config,
+    CustomEngramDionConfig,  # < -- Custom engram_dion, clean public import!
+    CosWithWarmup,
+)
+from olmo_core.train import Duration, TrainerConfig
+from olmo_core.eval import Evaluator # <-- Add Evaluator here
+from olmo_core.train.callbacks import CheckpointerCallback, CometCallback, WandBCallback, LMEvaluatorCallbackConfig
+from olmo_core.train.train_module import (
+    TransformerDataParallelConfig,
+    TransformerDataParallelWrappingStrategy,
+    TransformerTrainModuleConfig,
+    TransformerActivationCheckpointingConfig, # <- Add this import for activation checkpointing
+)
+from olmo_core.nn.transformer import TransformerActivationCheckpointingMode
+
+
+from olmo_core.train.train_module import (
+    TransformerTrainModuleConfig,
+    TransformerDataParallelConfig,
+    TransformerDataParallelWrappingStrategy,
+)
+from olmo_core.distributed.parallel import DataParallelType
+from olmo_core.float8 import Float8Config
+from olmo_core.config import DType
+
+import numpy as np
+
+# ==========================================
+# 0. CONDITIONAL PRE-TRAINING HYPERPARAMETERS (testing vs real training)
+# ==========================================
+from dataclasses import dataclass
+from typing import Optional
+from olmo_core.train import Duration
+
+@dataclass(frozen=True)
+class TrainProfile:
+    warmup_steps: int
+    metrics_interval: int
+    eval_interval: int
+    eval_on_finish: bool
+    max_duration: Duration
+
+# 1. Declarative Profile Matrix
+PROFILES: dict[str, TrainProfile] = {
+    "integration": TrainProfile(
+        warmup_steps=10,
+        metrics_interval=5,
+        eval_interval=20,
+        eval_on_finish=True,
+        max_duration=Duration.steps(20),
+    ),
+    "debug": TrainProfile(
+        warmup_steps=20,
+        metrics_interval=10,
+        eval_interval=100,
+        eval_on_finish=True,
+        max_duration=Duration.steps(200),
+    ),
+    "production": TrainProfile(
+        warmup_steps=100,
+        metrics_interval=50,
+        eval_interval=100,
+        eval_on_finish=True,
+        max_duration=Duration.tokens(int(5_000_000_000)),
+    ),
+}
+
+# 2. Builder with Guardrails & Overrides
+def build_train_profile(
+    profile_name: str = "debug", 
+    override_steps: Optional[int] = None
+) -> TrainProfile:
+    # Guardrail 1: Catch invalid profile strings immediately
+    if profile_name not in PROFILES:
+        raise ValueError(f"Unknown profile '{profile_name}'. Must be one of {list(PROFILES.keys())}")
+
+    profile = PROFILES[profile_name]
+
+    # Optional override: If you want 50 steps instead of the default 20/200
+    if override_steps is not None:
+        if override_steps <= 0:
+            raise ValueError(f"override_steps must be > 0, got {override_steps}")
+        
+        # Guardrail 2: Ensure warmup doesn't exceed total steps
+        safe_warmup = min(profile.warmup_steps, override_steps // 2)
+        
+        return TrainProfile(
+            warmup_steps=safe_warmup,
+            metrics_interval=min(profile.metrics_interval, max(1, override_steps // 4)),
+            eval_interval=override_steps,
+            eval_on_finish=True,
+            max_duration=Duration.steps(override_steps),
+        )
+
+    return profile
+
+profile = build_train_profile(profile_name="debug", override_steps=150)
+
+
+# ==========================================
+# 1. PRIMARY PRE-TRAINING HYPERPARAMETERS (The Source of Truth)
+# ==========================================
+SEQUENCE_LENGTH = 2048
+GLOBAL_BATCH_SIZE = 32 * SEQUENCE_LENGTH  # Token-constant batch size
+RANK_MICROBATCH_SIZE = 8 * SEQUENCE_LENGTH  # Sequence size per card
+
+LR = 3e-4
+WEIGHT_DECAY = 0.1
+
+# Point directly to your local converted RunPod data paths!
+DATA_PATHS = [
+    "/workspace/olmo3_data/input_ids_shard_0.npy",
+]
+
+# Point directly to your local validation dataset holding path on RunPod NVMe SSD
+VAL_DATA_PATH = "/workspace/olmo3_data/input_ids_shard_1.npy"
+
+
+# ==========================================
+# 2. MODEL CONFIGURATION
+# ==========================================
+
+from typing import Callable
+
+# ==========================================
+# 2.1. SHARED BUILDER HELPERS
+# ==========================================
+def build_engram_config(base_vocab: int, d_embed: int = 1280) -> EngramConfig:
+    # Scale total engram lookup rows dynamically based on official tokenizer size
+    engram_vocab = 2 * base_vocab
+
+    # Custom Section 2.2 Sparse Retrieval via Hashed N-grams Mapping
+    return EngramConfig(
+        max_ngram_size=3,
+        n_embed_per_ngram=d_embed,  # 👉🏻  1280 or 1024, revert back to 1024, 1280 was too unstable
+        n_head_per_ngram=8,
+        layer_ids=[1, 5],   # Early and mid-layer memory injection
+        engram_vocab_size=[engram_vocab, engram_vocab],
+    )
+
+
+# ==========================================
+# 2.2. ISOLATED ARCHITECTURE BUILDERS
+# ==========================================
+def build_dense_base_model(common: CommonComponents) -> TransformerConfig:
+    # ‼ seperate base vocalb from engram vocab to avoid wrong LM embedding size
+    base_vocab = common.tokenizer.padded_vocab_size()
+    return TransformerConfig.olmo3_600M(vocab_size=base_vocab)
+
+
+def build_engram_attn_model(common: CommonComponents) -> TransformerConfig:
+    # ‼ seperate base vocalb from engram vocab to avoid wrong LM embedding size
+    base_vocab = common.tokenizer.padded_vocab_size()
+    engram_config = build_engram_config(base_vocab, d_embed=1280)
+
+    return TransformerConfig.olmo3_600M(
+        vocab_size=base_vocab,
+        engram=engram_config,
+    )
+
+
+def build_engram_gdn_model(common: CommonComponents) -> TransformerConfig:
+    # ‼ seperate base vocalb from engram vocab to avoid wrong LM embedding size
+    base_vocab = common.tokenizer.padded_vocab_size()
+
+    # GDN config -- make everything smaller than olmo3_600M config to makeup for additional pram due to conv
+    # 0. Match engram dim to GDN dim 
+    engram_config = build_engram_config(base_vocab, d_embed=1280)
+
+    # 1. Set the Golden Dimensions
+    cfg_gdn_dense = TransformerConfig.olmo3_600M(
+        vocab_size=base_vocab,
+        engram=engram_config,
+        d_model=1280,  # 👉🏻 1280, or 1024 revert back to 1024, 1280 was too unstable
+        n_heads=16     # revert back to 16 heads
+    )
+
+    assert isinstance(cfg_gdn_dense.block, TransformerBlockConfig)
+    assert isinstance(cfg_gdn_dense.block.sequence_mixer, AttentionConfig)
+
+    attn_block = cfg_gdn_dense.block
+
+    # 2. Build GDN with forced hardware-safe dimensions
+    gdn_block = attn_block.replace(
+        sequence_mixer=GatedDeltaNetConfig(
+            n_heads=16,
+            head_dim=64, # HARDCODE to 64! (No 0.75 multiplier)
+            allow_neg_eigval=True,
+        ),
+    )
+
+    # 3. Apply the 3:1 Hybrid Pattern
+    cfg_gdn_dense.block = {"gdn": gdn_block, "attn": attn_block}
+    cfg_gdn_dense.block_pattern = ["gdn", "gdn", "gdn", "attn"]
+    assert cfg_gdn_dense.n_layers % len(cfg_gdn_dense.block_pattern) == 0
+
+    return cfg_gdn_dense
+
+
+# ==========================================
+# 2.3. MODEL REGISTRY & ENTRYPOINT
+# ==========================================
+MODEL_REGISTRY: dict[str, Callable[[CommonComponents], TransformerConfig]] = {
+    "dense_base": build_dense_base_model,
+    "engram_attn": build_engram_attn_model,
+    "engram_gdn": build_engram_gdn_model,
+}
+
+
+def build_model_config(
+    common: CommonComponents, 
+    model_type: str = "engram_attn"
+) -> TransformerConfig:
+    if model_type not in MODEL_REGISTRY:
+        raise ValueError(
+            f"❌ Unknown model_type '{model_type}'. "
+            f"Valid options are: {list(MODEL_REGISTRY.keys())}"
+        )
+    return MODEL_REGISTRY[model_type](common)
+
+
+
+# ==========================================
+# 3. TRAINING ENGINE CONFIGURATION
+# ==========================================
+
+# ==========================================
+# 3-0. OPTIMIZER HYPERPARAMETERS (Base scalars)
+# ==========================================
+BASE_LR = 3e-4
+BASE_WD = 0.01
+DION_FRACTION = 0.25
+ADJUST_LR = "spectral_norm",
+
+# ==========================================
+# 3-1. OPTIMIZER BUILDERS
+# ==========================================
+def build_adamw() -> OptimConfig:
+    return AdamWConfig(
+        lr = BASE_LR,
+        weight_decay = BASE_WD,
+    )
+
+def build_muon() -> OptimConfig:
+    return MuonConfig(
+        lr = BASE_LR*10,
+        weight_decay = BASE_WD,
+        adjust_lr = ADJUST_LR,
+    )
+
+def build_dion3() -> OptimConfig:
+    return Dion3Config(
+        lr = BASE_LR *10/ DION_FRACTION,
+        weight_decay = BASE_WD,
+        fraction = DION_FRACTION,
+        adjust_lr = ADJUST_LR,
+    )
+
+# ==========================================
+# 3-2. OPTIMIZER REGISTRY & ROUTER
+# ==========================================
+OPTIMIZER_REGISTRY: dict[str, Callable[[], OptimConfig]] = {
+    "adamw": build_adamw,
+    "muon": build_muon,
+    "dion3": build_dion3,
+}
+
+def build_optimizer_config(optimizer_type: str = "dion3") -> OptimConfig:
+    if optimizer_type not in OPTIMIZER_REGISTRY:
+        raise ValueError(
+            f"❌ Unknown optimizer '{optimizer_type}'. "
+            f"Valid options are: {list(OPTIMIZER_REGISTRY.keys())}"
+        )
+    # Execute the selected builder
+    return OPTIMIZER_REGISTRY[optimizer_type]()
+
+
+# ==========================================
+# 3-3. TRAINING ENGINE CONFIGURATION
+# ==========================================
+def build_train_module_config(
+    common: CommonComponents,
+    optimizer_type: str = "dion3",
+    profile: TrainProfile = PROFILES["debug"],
+) -> TransformerTrainModuleConfig:
+    return TransformerTrainModuleConfig(
+        rank_microbatch_size=RANK_MICROBATCH_SIZE,
+        max_sequence_length=SEQUENCE_LENGTH,
+        optim=build_optimizer_config(optimizer_type),
+        compile_model=True,
+        dp_config=TransformerDataParallelConfig(
+            name=DataParallelType.hsdp,
+            param_dtype=DType.bfloat16,
+            reduce_dtype=DType.bfloat16,
+            wrapping_strategy=TransformerDataParallelWrappingStrategy.blocks,
+        ),
+        float8_config=Float8Config(enabled=False),
+        z_loss_multiplier=1e-5,
+        max_grad_norm=1.0,
+        scheduler=CosWithWarmup(warmup_steps=profile.warmup_steps),
+    )
+
+# ==========================================
+# 4. DATALOADER COMPONENTS CONFIGURATION
+# ==========================================
+def build_data_components(
+    common: CommonComponents,
+    intra_document_masking: bool = False,
+    include_instance_filter: bool = False,  # 🌟 I was delteing in the body, but the argument was missing in the signature line 🤡
+) -> DataComponents:
+    
+    dataset_config =  NumpyFSLDatasetConfig(
+        paths=DATA_PATHS,                      # Custom RunPod local NVMe storage paths
+        tokenizer=common.tokenizer,
+        mix_base_dir=common.root_dir,
+        work_dir=common.work_dir,
+        sequence_length=SEQUENCE_LENGTH,       # Guaranteed alignment matching
+        max_target_sequence_length=SEQUENCE_LENGTH, # Single stage fixed length block tuning
+        generate_doc_lengths=intra_document_masking,
+        instance_filter_config=None,           # Dropped messy legacy filter instances
+    )
+
+    data_loader_config = NumpyDataLoaderConfig(
+        global_batch_size=GLOBAL_BATCH_SIZE,   # Track token ceilings safely
+        seed=34521, 
+        num_workers=4                          # Tuned to optimize RunPod host processor threads
+    )
+
+    return DataComponents(dataset=dataset_config, data_loader=data_loader_config)
+
+
+
+def build_trainer_config(
+    common: CommonComponents,
+    profile: TrainProfile = PROFILES["debug"],
+) -> TrainerConfig:
+    cancel_check_interval = 10
+    
+    # Generate an explicit timestamped production run string
+    run_name = f"{common.run_name}-{datetime.now().astimezone().strftime('%Y%m%dT%H%M%S%z')}"
+
+    # ==========================================================================
+    # STAGE A: BLUEPRINT THE VALIDATION INFRASTRUCTURE
+    # ==========================================================================
+    val_dataset_config =  NumpyPaddedFSLDatasetConfig(
+        paths=[VAL_DATA_PATH], 
+        tokenizer=common.tokenizer,
+        mix_base_dir=common.root_dir,
+        work_dir=common.work_dir,
+        sequence_length=SEQUENCE_LENGTH,            # Pinned to unified source of truth
+        metadata=[{"label": None}],                 # Pass as a list if it's a single shard
+        instance_filter_config=None,                # Dropped messy legacy filter instances
+    )
+    
+    # 🗑️ NOTE: val_loader_config is DELETED. The callback handles it natively!
+
+    # ==========================================================================
+    # STAGE B: ASSEMBLE THE DECLARATIVE TRAINER CONFIGURATION FACTORY
+    # ==========================================================================
+    return (
+        TrainerConfig(
+            save_folder=f"/workspace/checkpoints/{common.run_name}/", # Saved safely on local workspace volume
+            save_overwrite=True,
+            metrics_collect_interval= profile.metrics_interval,
+            cancel_check_interval=cancel_check_interval,
+            # Target limit: 5 Billion Tokens total pre-training window track
+            max_duration=profile.max_duration, 
+            hard_stop=Duration.tokens(int(10_000_000_000)),
+        )
+        .with_callback(
+            "checkpointer",
+            CheckpointerCallback(
+                # CRITICAL CALIBRATION FOR MINIRUNS: 
+                # Since you are using Dion/Muon matrix optimization tracks, the model learns significantly 
+                # faster per step than traditional AdamW. Saving a permanent checkpoint every 500 steps 
+                # and maintaining an ephemeral sliding snapshot backup every 100 steps ensures you 
+                # capture the fast convergence dynamics without burning local disk storage overheads.
+                save_interval=200,               
+                ephemeral_save_interval=100,     
+                enabled=True,                    
+                pre_train_checkpoint=False, 
+                save_async=True,                 # Offloads heavy disk I/O to background system threads
+            ),
+        )
+        .with_callback(
+            "comet",
+            CometCallback(
+                name=run_name,
+                workspace="jenwei0312",                     
+                project="olmo3-optimizer-experiments",
+                enabled=False,                              # Explicitly deactivated for this setup
+            ),
+        )
+        .with_callback(
+            "wandb",
+            WandBCallback(
+                name=run_name,
+                group=f"{common.run_name}-optimizer",          
+                entity="jenwei0312",
+                project="olmo3-optimizer-experiments",         
+                enabled=True,
+                cancel_check_interval=cancel_check_interval,
+            ),
+        )
+
+
+        # 🌟 THE TRUE AI2 VALIDATION TRACKER 🌟
+        .with_callback(
+            "lm_evaluator",
+            LMEvaluatorCallbackConfig(
+                eval_dataset= val_dataset_config,  # <-- Pass eval dataset this way, cleaner
+                eval_interval=profile.eval_interval,    # Pause and check validation loss every 100 steps
+                eval_on_finish=profile.eval_on_finish,  # Guarantee a final eval when the 5B tokens are done
+                eval_duration=Duration.steps(20),
+                log_interval=5,
+            ),
+        )
+
+    )
+
+
+if __name__ == "__main__":
+    import sys
+    from functools import partial
+    # ==========================================
+    # 🎛️ THE 3 EXPERIMENT KNOBS
+    # ==========================================
+    RUN_TYPE       = "integration"         # "integration" (20 steps) | "debug" (200 steps) | "production" (5B tokens)
+    MODEL_TYPE     = "base_dense"   # "dense_base" | "engram_attn" | "engram_gdn"
+    OPTIMIZER_TYPE = "dion3"         # "adamw" | "muon" | "dion3"
+
+    # 1. Resolve duration profile
+    profile = build_train_profile(RUN_TYPE)
+
+    # 2. Build unique descriptive experiment identifier
+    run_name = f"olmo3-500m-{MODEL_TYPE}-{OPTIMIZER_TYPE}-{RUN_TYPE}"
+    
+    # 3. Pacify AI2's internal argv consumer
+    # Force the exact action arguments that olmo_core's internal parser needs!
+    # [0] is the script path, [1] is the subcommand, [2] is a dummy run name, [3] is the cluster type
+
+    sys.argv = [sys.argv[0], "train", run_name, "local"]
+
+    # Re-import the native experiment runner safely
+    from olmo_core.internal.experiment import main
+
+    # 4. Bind the 3 knobs into the builders via partial
+    config_builder = partial(
+        build_config,
+        global_batch_size=GLOBAL_BATCH_SIZE,
+        max_sequence_length=SEQUENCE_LENGTH,
+        data_config_builder=build_data_components,
+        # Knob 1 -> Model:
+        model_config_builder=partial(
+            build_model_config, 
+            model_type=MODEL_TYPE
+        ),
+        # Knob 2 & 3 -> Train Module (Optim + Warmup):
+        train_module_config_builder=partial(
+            build_train_module_config, 
+            optimizer_type=OPTIMIZER_TYPE,
+            profile=profile,
+        ),
+        # Knob 3 -> Trainer (Duration & Telemetry intervals):
+        trainer_config_builder=partial(
+            build_trainer_config,
+            profile=profile,
+        ),
+        include_default_evals=False,
+        include_instance_filter=False,  
+    )
+    
+    print(f"🚀 Bootstrapping Run: {run_name}")
+    print(f"   Duration: {profile.max_duration} | Warmup: {profile.warmup_steps} steps")
+    main(config_builder=config_builder)
