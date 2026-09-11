@@ -111,6 +111,7 @@ from olmo_core.float8 import Float8Config
 from olmo_core.config import DType
 
 import numpy as np
+import math
 
 # ==========================================
 # 0. CONDITIONAL PRE-TRAINING HYPERPARAMETERS (testing vs real training)
@@ -317,7 +318,7 @@ def build_model_config(
 BASE_LR = 3e-4
 BASE_WD = 0.01
 DION_FRACTION = 0.25
-ADJUST_LR = "spectral_norm",
+ADJUST_LR = "spectral_norm"
 
 # ==========================================
 # 3-1. OPTIMIZER BUILDERS
@@ -337,7 +338,7 @@ def build_muon() -> OptimConfig:
 
 def build_dion3() -> OptimConfig:
     return Dion3Config(
-        lr = BASE_LR *10/ DION_FRACTION,
+        lr = BASE_LR *10/ math.sqrt(DION_FRACTION),
         weight_decay = BASE_WD,
         fraction = DION_FRACTION,
         adjust_lr = ADJUST_LR,
