@@ -315,10 +315,10 @@ def build_model_config(
 # ==========================================
 # 3-0. OPTIMIZER HYPERPARAMETERS (Base scalars)
 # ==========================================
-BASE_LR = 3e-4
+BASE_LR = 1e-3
 BASE_WD = 0.01
 DION_FRACTION = 0.25
-ADJUST_LR = "spectral_norm"
+ADJUST_LR = "rms_norm"
 
 # ==========================================
 # 3-1. OPTIMIZER BUILDERS
@@ -331,14 +331,14 @@ def build_adamw() -> OptimConfig:
 
 def build_muon() -> OptimConfig:
     return MuonConfig(
-        lr = BASE_LR*10,
+        lr = BASE_LR,
         weight_decay = BASE_WD,
         adjust_lr = ADJUST_LR,
     )
 
 def build_dion3() -> OptimConfig:
     return Dion3Config(
-        lr = BASE_LR *10/ math.sqrt(DION_FRACTION),
+        lr = BASE_LR / math.sqrt(DION_FRACTION),
         weight_decay = BASE_WD,
         fraction = DION_FRACTION,
         adjust_lr = ADJUST_LR,
