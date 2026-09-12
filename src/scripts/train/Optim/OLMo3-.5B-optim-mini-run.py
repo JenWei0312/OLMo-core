@@ -190,7 +190,7 @@ profile = build_train_profile(profile_name="debug", override_steps=150)
 # ==========================================
 SEQUENCE_LENGTH = 2048
 GLOBAL_BATCH_SIZE = 32 * SEQUENCE_LENGTH  # Token-constant batch size
-RANK_MICROBATCH_SIZE = 8 * SEQUENCE_LENGTH  # Sequence size per card
+RANK_MICROBATCH_SIZE = 16 * SEQUENCE_LENGTH  # Sequence size per card
 
 LR = 3e-4
 WEIGHT_DECAY = 0.1
