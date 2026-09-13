@@ -23,7 +23,7 @@ pip install -e .[all]
 
 echo "⚡ Integrating Orthonormal Optimizer Subspaces (Dion)..."
 # Compiles the dynamic Triton NS matrices natively from Microsoft
-pip install git+https://github.com/microsoft/dion.git --no-cache-dir
+pip install --upgrade --force-reinstall git+https://github.com/microsoft/dion.git --no-cache-dir
 
 # ==========================================
 # 3. PYTORCH ARCHITECTURE LOCKDOWN
@@ -54,6 +54,10 @@ echo "🔍 Active triton version: ${ACTIVE_TRITON}"
 # ==========================================
 echo "🧟 Exorcising Zombie Libraries..."
 pip uninstall -y flash-attn cutlass torch_c_dlpack_ext || true
+
+# 👇 ADD THIS LINE TO FORCE A WORKING WANDB VERSION 👇
+echo "📉 Reining in loose dependency drift (Downgrading W&B)..."
+pip install "wandb<0.18.0"
 
 echo "👻 Setting up Phantom Imports..."
 # Find the active venv site-packages directory
