@@ -24,13 +24,14 @@ log = logging.getLogger(__name__)
 def _import_dion():
     """Import and return Dion and Dion3 from dion, raising a helpful error if not installed."""
     try:
-        from dion import Dion, NorDion2  # type: ignore 
+        from dion.dion import Dion
+        from dion.nordion2 import NorDion2
     except ImportError as e:
         raise ImportError(
             "The 'dion' package is required for the Dion optimizer. "
             "Install it with: pip install git+https://github.com/microsoft/dion.git"
         ) from e
-    return Dion, NorDion2  # NorDion2  is Dion3
+    return Dion, NorDion2  # NorDion2 is Dion3
 
 
 @OptimConfig.register("dion")
