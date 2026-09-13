@@ -24,15 +24,23 @@ log = logging.getLogger(__name__)
 def _import_dion():
     """Import and return Dion and Dion3 from dion, raising a helpful error if not installed."""
     try:
-        from dion.dion import Dion
-        from dion.nordion2 import NorDion2
-    except ImportError as e:
+        import dion
+        
+        # Extract classes dynamically to bypass namespace shadowing
+        Dion = getattr(dion, "Dion")
+        
+        # The package aliases NorDion2 as Dion3; safely grab whichever is exposed
+        Dion3 = getattr(dion, "Dion3", getattr(dion, "NorDion2", None))
+        
+        if Dion3 is None:
+            raise ImportError("dion package found, but NorDion2/Dion3 is missing.")
+            
+        return Dion, Dion3
+    except Exception as e:
         raise ImportError(
             "The 'dion' package is required for the Dion optimizer. "
             "Install it with: pip install git+https://github.com/microsoft/dion.git"
         ) from e
-    return Dion, NorDion2  # NorDion2 is Dion3
-
 
 @OptimConfig.register("dion")
 @dataclass
