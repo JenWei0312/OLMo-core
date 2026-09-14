@@ -90,6 +90,7 @@ from olmo_core.optim import (
     CustomEngramDionConfig,  # < -- Custom engram_dion, clean public import!
     CosWithWarmup,
     ConstantScheduler,
+    ConstantWithWarmup,
 )
 from olmo_core.train import Duration, TrainerConfig
 from olmo_core.eval import Evaluator # <-- Add Evaluator here
@@ -392,8 +393,9 @@ def build_train_module_config(
         float8_config=Float8Config(enabled=False),
         z_loss_multiplier=1e-5,
         max_grad_norm=1.0,
-        scheduler=CosWithWarmup(warmup_steps=profile.warmup_steps),
+        #scheduler=CosWithWarmup(warmup_steps=profile.warmup_steps),
         #scheduler = ConstantScheduler(),
+        scheduler=ConstantWithWarmup(warmup=profile.warmup_steps),
     )
 
 # ==========================================
