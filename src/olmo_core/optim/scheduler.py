@@ -506,24 +506,22 @@ import torch
 @Scheduler.register("persistent_cos_with_warmup")
 @dataclass
 class PersistentCosWithWarmup(CosWithWarmup):
-    """Stores base LRs internally to survive optimizers that wipe custom dict keys."""
+    """Stores base LRs internally by index, mirroring MS LambdaLR to survive ZeRO-1 wipes."""
     def set_lr(self, group: dict[str, Any], trainer: "Trainer") -> float | torch.Tensor:
-        # 1. Initialize internal state storage once
-        if not hasattr(self, "_persistent_base_lrs"):
-            self._persistent_base_lrs = {}
+        # 1. On the very first call, snapshot all pristine base LRs in order
+        if not hasattr(self, "_base_lrs"):
+            self._base_lrs = [g.get(self.lr_field) for g in trainer.optim.param_groups]
+            self._call_idx = 0
             
-        # 2. Use the memory address of the first parameter as a stable group ID
-        group_id = id(group["params"][0])
+        # 2. Determine the group's exact index via cyclic counter (e.g., 0, 1, 2, 3)
+        group_idx = self._call_idx % len(self._base_lrs)
+        self._call_idx += 1
         
-        # 3. Snapshot the pristine base LR on step 1
-        if group_id not in self._persistent_base_lrs:
-            self._persistent_base_lrs[group_id] = group.get(self.lr_field)
-            
-        # 4. Re-inject the anchor every step before OLMo's native logic runs
-        group[self.initial_lr_field] = self._persistent_base_lrs[group_id]
+        # 3. Force the indestructible anchor back into the dictionary
+        group[self.initial_lr_field] = self._base_lrs[group_idx]
         
+        # 4. Let OLMo compute the standard cosine math using the stable anchor
         return super().set_lr(group, trainer)
-
 
 @Scheduler.register("half_cos_with_warmup")
 @dataclass
