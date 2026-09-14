@@ -85,6 +85,7 @@ from olmo_core.optim import (
     AdamWConfig,
     SkipStepAdamWConfig,
     MuonConfig,
+    DionConfig,
     Dion3Config,
     CustomEngramDionConfig,  # < -- Custom engram_dion, clean public import!
     CosWithWarmup,
@@ -334,6 +335,12 @@ def build_muon() -> OptimConfig:
         adjust_lr = ADJUST_LR,
     )
 
+def build_dion() -> OptimConfig:
+    return DionConfig(
+        lr = BASE_LR,
+        weight_decay = BASE_WD,
+    )
+
 def build_dion3() -> OptimConfig:
     return Dion3Config(
         lr = BASE_LR / math.sqrt(DION_FRACTION),
@@ -348,6 +355,7 @@ def build_dion3() -> OptimConfig:
 OPTIMIZER_REGISTRY: dict[str, Callable[[], OptimConfig]] = {
     "adamw": build_adamw,
     "muon": build_muon,
+    "dion": build_dion,
     "dion3": build_dion3,
 }
 
@@ -513,7 +521,7 @@ if __name__ == "__main__":
     # ==========================================
     RUN_TYPE       = "integration"         # "integration" (20 steps) | "debug" (200 steps) | "production" (5B tokens)
     MODEL_TYPE     = "dense_base"   # "dense_base" | "engram_attn" | "engram_gdn"
-    OPTIMIZER_TYPE = "adamw"         # "adamw" | "muon" | "dion3"
+    OPTIMIZER_TYPE = "dion"         # "adamw" | "muon" | "dion"| "dion3"
 
     # 1. Resolve duration profile
     profile = build_train_profile(RUN_TYPE)
