@@ -245,8 +245,19 @@ class Dion3Config(DionConfig):
             dist_mesh = None
 
         # 5. Build optimizer with explicit keyword argument
-        return self.optimizer()(
+        optim= self.optimizer()(
             self.build_groups(model, strict=strict),
             distributed_mesh=dist_mesh,
             **kwargs,
         )
+
+        # 🛑 PYTORCH 2.X SCHEDULER PATCH
+        # Force the custom optimizer to increment the global step count so the LR scheduler advances
+        original_step = optim.step
+        def patched_step(*args, **kwargs):
+            result = original_step(*args, **kwargs)
+            optim._step_count = getattr(optim, "_step_count", 0) + 1
+            return result
+        optim.step = patched_step
+
+        return optim
