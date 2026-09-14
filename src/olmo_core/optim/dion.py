@@ -244,9 +244,38 @@ class Dion3Config(DionConfig):
         else:
             dist_mesh = None
 
+
+    
         # 5. Build optimizer with explicit keyword argument
-        return self.optimizer()(
+        optim = self.optimizer()(
             self.build_groups(model, strict=strict),
             distributed_mesh=dist_mesh,
             **kwargs,
         )
+
+        # 🛑 PYTORCH SCHEDULER PATCH
+        # DistributedOrthoBase dynamically recreates param_groups, destroying 'initial_lr'.
+        # We must snapshot and re-inject it so CosWithWarmup has a stable anchor.
+        
+        # 1. Snapshot the pristine base learning rates
+        initial_lrs = [group['lr'] for group in optim.param_groups]
+        
+        # 2. Inject them immediately for the first scheduler call
+        for group, init_lr in zip(optim.param_groups, initial_lrs):
+            group['initial_lr'] = init_lr
+
+        original_step = optim.step
+        def patched_step(*args, **kwargs):
+            result = original_step(*args, **kwargs)
+            
+            # 3. Re-inject initial_lr after the optimizer destroys it
+            for group, init_lr in zip(optim.param_groups, initial_lrs):
+                group['initial_lr'] = init_lr
+                
+            # 4. Force increment global step count
+            optim._step_count = getattr(optim, "_step_count", 0) + 1
+            return result
+            
+        optim.step = patched_step
+
+        return optim
