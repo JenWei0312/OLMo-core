@@ -114,7 +114,8 @@ class WandBCallback(Callback):
                 log.warning("Finalizing failed W&B run...")
             else:
                 log.info("Finalizing successful W&B run...")
-            self.wandb.finish(exit_code=exit_code, quiet=True)
+            # Remove quiet=True from here
+            self.wandb.finish(exit_code=exit_code) 
             self._finalized = True
 
     def pre_train(self):
@@ -134,6 +135,8 @@ class WandBCallback(Callback):
                 tags=self.tags,
                 notes=self.notes,
                 config=self.config,
+                # Add this line below to handle quiet mode at init
+                settings=self.wandb.Settings(quiet=True), 
             )
             self._run_path = self.run.path  # type: ignore
 

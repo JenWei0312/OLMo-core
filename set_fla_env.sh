@@ -55,11 +55,6 @@ echo "🔍 Active triton version: ${ACTIVE_TRITON}"
 echo "🧟 Exorcising Zombie Libraries..."
 pip uninstall -y flash-attn cutlass torch_c_dlpack_ext || true
 
-# 👇 FIX: Fully purge wandb and protobuf before cleanly forcing the version 👇
-echo "🧹 Purging and locking down W&B + Protobuf parity..."
-pip uninstall -y wandb protobuf
-pip install "wandb==0.17.3" "protobuf>=4.24,<5.0" --no-cache-dir
-
 echo "👻 Setting up Phantom Imports..."
 # Find the active venv site-packages directory
 SITE_PACKAGES=$(python -c 'import site; print(site.getsitepackages()[0])')
