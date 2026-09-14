@@ -523,7 +523,7 @@ if __name__ == "__main__":
     # ==========================================
     RUN_TYPE       = "integration"         # "integration" (20 steps) | "debug" (200 steps) | "production" (5B tokens)
     MODEL_TYPE     = "dense_base"   # "dense_base" | "engram_attn" | "engram_gdn"
-    OPTIMIZER_TYPE = "dion3"         # "adamw" | "muon" | "dion"| "dion3"
+    OPTIMIZER_TYPE = "adamw"         # "adamw" | "muon" | "dion"| "dion3"
 
     # 1. Resolve duration profile
     profile = build_train_profile(RUN_TYPE)
