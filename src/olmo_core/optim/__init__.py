@@ -19,6 +19,7 @@ from .scheduler import (
     ConstantScheduler,
     ConstantWithWarmup,
     CosWithWarmup,
+    PersistentCosWithWarmup, #<-- added for persistent cosine scheduler support for dion3
     CosWithWarmupAndLinearDecay,
     ExponentialScheduler,
     HalfCosWithWarmup,

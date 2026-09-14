@@ -500,6 +500,31 @@ class CosWithWarmup(Scheduler):
             return eta_min + (initial_lr - eta_min) * (1 + cos(pi * current / t_max)) / 2
 
 
+from typing import Any
+import torch
+
+@Scheduler.register("persistent_cos_with_warmup")
+@dataclass
+class PersistentCosWithWarmup(CosWithWarmup):
+    """Stores base LRs internally to survive optimizers that wipe custom dict keys."""
+    def set_lr(self, group: dict[str, Any], trainer: "Trainer") -> float | torch.Tensor:
+        # 1. Initialize internal state storage once
+        if not hasattr(self, "_persistent_base_lrs"):
+            self._persistent_base_lrs = {}
+            
+        # 2. Use the memory address of the first parameter as a stable group ID
+        group_id = id(group["params"][0])
+        
+        # 3. Snapshot the pristine base LR on step 1
+        if group_id not in self._persistent_base_lrs:
+            self._persistent_base_lrs[group_id] = group.get(self.lr_field)
+            
+        # 4. Re-inject the anchor every step before OLMo's native logic runs
+        group[self.initial_lr_field] = self._persistent_base_lrs[group_id]
+        
+        return super().set_lr(group, trainer)
+
+
 @Scheduler.register("half_cos_with_warmup")
 @dataclass
 class HalfCosWithWarmup(Scheduler):

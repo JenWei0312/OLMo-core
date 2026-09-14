@@ -91,6 +91,7 @@ from olmo_core.optim import (
     CosWithWarmup,
     ConstantScheduler,
     ConstantWithWarmup,
+    PersistentCosWithWarmup,
 )
 from olmo_core.train import Duration, TrainerConfig
 from olmo_core.eval import Evaluator # <-- Add Evaluator here
@@ -394,8 +395,8 @@ def build_train_module_config(
         z_loss_multiplier=1e-5,
         max_grad_norm=1.0,
         #scheduler=CosWithWarmup(warmup_steps=profile.warmup_steps),
+        scheduler=PersistentCosWithWarmup(warmup_steps=profile.warmup_steps), 
         #scheduler = ConstantScheduler(),
-        scheduler=ConstantWithWarmup(warmup=profile.warmup_steps),
     )
 
 # ==========================================
