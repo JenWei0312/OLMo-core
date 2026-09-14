@@ -245,29 +245,8 @@ class Dion3Config(DionConfig):
             dist_mesh = None
 
         # 5. Build optimizer with explicit keyword argument
-        optim= self.optimizer()(
+        return self.optimizer()(
             self.build_groups(model, strict=strict),
             distributed_mesh=dist_mesh,
             **kwargs,
         )
-
-        # 🛑 PYTORCH SCHEDULER & IN-PLACE MUTATION PATCH
-        original_step = optim.step
-        def patched_step(*args, **kwargs):
-            # 1. Snapshot the pristine learning rates dictated by the scheduler
-            lrs = [group['lr'] for group in optim.param_groups]
-            
-            # 2. Execute the optimizer step (which mutates the LRs in-place)
-            result = original_step(*args, **kwargs)
-            
-            # 3. Restore the pristine learning rates to break the exponential collapse
-            for group, lr in zip(optim.param_groups, lrs):
-                group['lr'] = lr
-                
-            # 4. Force increment global step count
-            optim._step_count = getattr(optim, "_step_count", 0) + 1
-            return result
-            
-        optim.step = patched_step
-
-        return optim
