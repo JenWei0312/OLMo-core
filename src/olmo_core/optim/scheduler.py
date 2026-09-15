@@ -135,10 +135,12 @@ class MSLambdaScheduler(Scheduler):
         # Cycle through the recorded pristine base LRs safely
         group_idx = self._call_idx % NUM_GROUPS
         base_lr = self._base_lrs[group_idx]
+        print('\nbase_lr=', base_lr)                                          # 👈🏻 debugging
         self._call_idx += 1
 
         # Calculate Microsoft's exact multiplier
         it = trainer.global_step
+        print('itr=', it)                                                 # 👈🏻 debugging
         warmup_iters = round(self.warmup_ratio * num_iterations)
         warmdown_iters = round(self.warmdown_ratio * num_iterations)
         
@@ -149,8 +151,11 @@ class MSLambdaScheduler(Scheduler):
         else:
             multiplier = (num_iterations - it) / max(1, warmdown_iters)
 
+        print('multiplier=', multiplier)                                    # 👈🏻 debugging
+
         # Strictly overwrite the dictionary LR
         new_lr = base_lr * multiplier
+        print('new_lr=', new_lr)                                            # 👈🏻 debugging
         
         if isinstance(current_lr := group.get(self.lr_field), torch.Tensor):
             current_lr.fill_(new_lr)
