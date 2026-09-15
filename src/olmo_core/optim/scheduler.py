@@ -96,6 +96,72 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
         return new_lr
 
 
+#---- Mimicing MS scheduler
+from typing import Any, Union, Dict, Optional
+import torch
+from dataclasses import dataclass
+
+@Scheduler.register("ms_lambda")
+@dataclass
+class MSLambdaScheduler(Scheduler):
+    """
+    Exact replication of Microsoft's Warmup-Stable-Warmdown schedule.
+    Safely records base LRs internally to survive ZeRO-1 dictionary wipes.
+    """
+    warmup_ratio: float = 0.2
+    warmdown_ratio: float = 0.2
+
+    def __post_init__(self):
+        self._base_lrs = []
+        self._call_idx = 0
+        self._record_step: Optional[int] = None
+
+    def get_lr(
+        self, initial_lr: Union[float, torch.Tensor], current: int, t_max: int
+    ) -> Union[float, torch.Tensor]:
+        return 0.0  # Satisfies Pylance return type checker
+
+    def set_lr(self, group: Dict[str, Any], trainer: Any) -> Union[float, torch.Tensor]:
+        # 1. Fix Pylance: Ensure max_steps is defined for the math operators
+        num_iterations = trainer.max_steps
+        if num_iterations is None:
+            raise ValueError("max_steps must be defined in the trainer")
+
+        # 2. Record pristine base LRs dynamically during the very first step
+        if self._record_step is None:
+            self._record_step = trainer.global_step
+            
+        if trainer.global_step == self._record_step:
+            self._base_lrs.append(group.get(self.lr_field))
+            
+        # 3. Cycle through the recorded base LRs safely
+        group_idx = self._call_idx % len(self._base_lrs)
+        base_lr = self._base_lrs[group_idx]
+        self._call_idx += 1
+
+        # 4. Calculate Microsoft's exact multiplier
+        it = trainer.global_step
+        warmup_iters = round(self.warmup_ratio * num_iterations)
+        warmdown_iters = round(self.warmdown_ratio * num_iterations)
+        
+        if it < warmup_iters:
+            multiplier = (it + 1) / max(1, warmup_iters)
+        elif it <= num_iterations - warmdown_iters:
+            multiplier = 1.0
+        else:
+            multiplier = (num_iterations - it) / max(1, warmdown_iters)
+
+        # 5. Strictly overwrite the dictionary LR
+        new_lr = base_lr * multiplier
+        
+        if isinstance(current_lr := group.get(self.lr_field), torch.Tensor):
+            current_lr.fill_(new_lr)
+        else:
+            group[self.lr_field] = new_lr
+
+        return new_lr
+
+
 @Scheduler.register("constant")
 @dataclass
 class ConstantScheduler(Scheduler):
@@ -499,29 +565,6 @@ class CosWithWarmup(Scheduler):
             t_max = t_max - warmup
             return eta_min + (initial_lr - eta_min) * (1 + cos(pi * current / t_max)) / 2
 
-
-from typing import Any
-import torch
-
-@Scheduler.register("persistent_cos_with_warmup")
-@dataclass
-class PersistentCosWithWarmup(CosWithWarmup):
-    """Stores base LRs internally by index, mirroring MS LambdaLR to survive ZeRO-1 wipes."""
-    def set_lr(self, group: dict[str, Any], trainer: "Trainer") -> float | torch.Tensor:
-        # 1. On the very first call, snapshot all pristine base LRs in order
-        if not hasattr(self, "_base_lrs"):
-            self._base_lrs = [g.get(self.lr_field) for g in trainer.optim.param_groups]
-            self._call_idx = 0
-            
-        # 2. Determine the group's exact index via cyclic counter (e.g., 0, 1, 2, 3)
-        group_idx = self._call_idx % len(self._base_lrs)
-        self._call_idx += 1
-        
-        # 3. Force the indestructible anchor back into the dictionary
-        group[self.initial_lr_field] = self._base_lrs[group_idx]
-        
-        # 4. Let OLMo compute the standard cosine math using the stable anchor
-        return super().set_lr(group, trainer)
 
 @Scheduler.register("half_cos_with_warmup")
 @dataclass
