@@ -111,7 +111,8 @@ class MSLambdaScheduler(Scheduler):
     warmup_ratio: float = 0.2
     warmdown_ratio: float = 0.2
 
-    def __post_init__(self):
+    def __post_init__(self, *args):
+        # Absorb OLMo's hidden config args and initialize our state
         self._base_lrs = []
         self._call_idx = 0
         self._record_step: Optional[int] = None
