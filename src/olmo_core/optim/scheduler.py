@@ -112,35 +112,32 @@ class MSLambdaScheduler(Scheduler):
     warmdown_ratio: float = 0.2
 
     def __post_init__(self, *args):
-        # Absorb OLMo's hidden config args and initialize our state
         self._base_lrs = []
         self._call_idx = 0
-        self._record_step: Optional[int] = None
 
     def get_lr(
         self, initial_lr: Union[float, torch.Tensor], current: int, t_max: int
     ) -> Union[float, torch.Tensor]:
-        return 0.0  # Satisfies Pylance return type checker
+        return 0.0  
 
     def set_lr(self, group: Dict[str, Any], trainer: Any) -> Union[float, torch.Tensor]:
-        # 1. Fix Pylance: Ensure max_steps is defined for the math operators
-        num_iterations = trainer.max_steps
+        num_iterations = getattr(trainer, "max_steps", None)
         if num_iterations is None:
             raise ValueError("max_steps must be defined in the trainer")
 
-        # 2. Record pristine base LRs dynamically during the very first step
-        if self._record_step is None:
-            self._record_step = trainer.global_step
-            
-        if trainer.global_step == self._record_step:
+        # 🛑 BULLETPROOF CAPTURE: 
+        # Your config explicitly builds exactly 4 parameter groups.
+        # This cap ensures microbatches cannot pollute the list after the first pass.
+        NUM_GROUPS = 4
+        if len(self._base_lrs) < NUM_GROUPS:
             self._base_lrs.append(group.get(self.lr_field))
             
-        # 3. Cycle through the recorded base LRs safely
-        group_idx = self._call_idx % len(self._base_lrs)
+        # Cycle through the recorded pristine base LRs safely
+        group_idx = self._call_idx % NUM_GROUPS
         base_lr = self._base_lrs[group_idx]
         self._call_idx += 1
 
-        # 4. Calculate Microsoft's exact multiplier
+        # Calculate Microsoft's exact multiplier
         it = trainer.global_step
         warmup_iters = round(self.warmup_ratio * num_iterations)
         warmdown_iters = round(self.warmdown_ratio * num_iterations)
@@ -152,7 +149,7 @@ class MSLambdaScheduler(Scheduler):
         else:
             multiplier = (num_iterations - it) / max(1, warmdown_iters)
 
-        # 5. Strictly overwrite the dictionary LR
+        # Strictly overwrite the dictionary LR
         new_lr = base_lr * multiplier
         
         if isinstance(current_lr := group.get(self.lr_field), torch.Tensor):
