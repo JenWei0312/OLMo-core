@@ -394,8 +394,8 @@ def build_train_module_config(
         float8_config=Float8Config(enabled=False),
         z_loss_multiplier=1e-5,
         max_grad_norm=1.0,
-        #scheduler=CosWithWarmup(warmup_steps=profile.warmup_steps),
-        scheduler = MSLambdaScheduler(), 
+        scheduler=CosWithWarmup(warmup=profile.warmup_steps),
+        #scheduler = MSLambdaScheduler(), 
         #scheduler = ConstantScheduler(),
     )
 
