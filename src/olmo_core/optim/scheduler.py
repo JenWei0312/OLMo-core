@@ -130,7 +130,11 @@ class MSLambdaScheduler(Scheduler):
         # This cap ensures microbatches cannot pollute the list after the first pass.
         NUM_GROUPS = 4
         if len(self._base_lrs) < NUM_GROUPS:
+            raw_lr = group.get(self.lr_field)
+            # Extract pure float to sever the memory link to the live PyTorch tensor
+            safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else raw_lr # 👈🏻 fix the _base_lr death spiralling bug
             self._base_lrs.append(group.get(self.lr_field))
+
             
         # Cycle through the recorded pristine base LRs safely
         group_idx = self._call_idx % NUM_GROUPS
