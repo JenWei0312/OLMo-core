@@ -522,8 +522,8 @@ class InvSqrtWithWarmup(Scheduler):
 class CosWithWarmup(Scheduler):
     """
     Cosine learning rate schedule with a warmup.
+    Fortified with dynamic group counting and tensor severing to survive ZeRO-1.
     """
-
     warmup: Optional[int] = None
     warmup_steps: Optional[int] = None  # deprecated, use 'warmup' instead.
     warmup_fraction: Optional[float] = None
@@ -532,43 +532,74 @@ class CosWithWarmup(Scheduler):
     warmup_min_lr: float = 0.0
 
     def __post_init__(self, *args):
-        del args
+        # 1. Native AI2 initialization logic
         if self.warmup is None and self.warmup_steps is not None:
             self.warmup = self.warmup_steps
-            self.warmup_steps = None
             warnings.warn(
                 f"'{self.__class__.__name__}.warmup_steps' is deprecated, please use '.warmup' instead.",
                 DeprecationWarning,
             )
 
         if (self.warmup_fraction is None) == (self.warmup is None):
-            raise OLMoConfigurationError("Either 'warmup_fraction' or 'warmup' must be specified.")
+            raise ValueError("Either 'warmup_fraction' or 'warmup' must be specified.")
 
-        if self.warmup_fraction is not None and (
-            self.warmup_fraction < 0 or self.warmup_fraction > 1
-        ):
-            raise OLMoConfigurationError("warmup_fraction must be between 0 and 1.")
+        if self.warmup_fraction is not None and (self.warmup_fraction < 0 or self.warmup_fraction > 1):
+            raise ValueError("warmup_fraction must be between 0 and 1.")
 
-    def get_lr(
-        self, initial_lr: Union[float, torch.Tensor], current: int, t_max: int
-    ) -> Union[float, torch.Tensor]:
+        # 2. Initialize the dynamic vault
+        self._base_lrs = []
+        self._call_idx = 0
+        self._record_step = None
+
+    def get_lr(self, initial_lr: float, current: int, t_max: int) -> Union[float, torch.Tensor]:
         t_max = t_max if self.t_max is None else self.t_max
         eta_min = initial_lr * self.alpha_f
 
         if self.warmup is None:
-            assert self.warmup_fraction is not None
             warmup = round(t_max * self.warmup_fraction)
         else:
             warmup = self.warmup
 
         if current < warmup:
-            return _linear_warmup(initial_lr, current, warmup, self.warmup_min_lr)
+            # Inlined linear warmup to avoid import errors
+            progress = current / max(1, warmup)
+            return self.warmup_min_lr + progress * (initial_lr - self.warmup_min_lr)
         elif current >= t_max:
             return eta_min
         else:
             current = current - warmup
             t_max = t_max - warmup
             return eta_min + (initial_lr - eta_min) * (1 + cos(pi * current / t_max)) / 2
+
+    def set_lr(self, group: Dict[str, Any], trainer: Any) -> Union[float, torch.Tensor]:
+        t_max = getattr(trainer, "max_steps", None)
+        if t_max is None:
+            raise ValueError("'max_steps' must be known in the trainer.")
+
+        # 1. DYNAMIC GROUP COUNTING & TENSOR SEVERING
+        if getattr(self, "_record_step", None) is None:
+            self._record_step = trainer.global_step
+
+        if trainer.global_step == self._record_step:
+            raw_lr = group.get(self.lr_field)
+            safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else raw_lr
+            self._base_lrs.append(safe_lr)
+
+        num_groups = len(self._base_lrs)
+        group_idx = self._call_idx % num_groups
+        base_lr = self._base_lrs[group_idx]
+        self._call_idx += 1
+
+        # 2. CALCULATE COSINE WARMUP MATH
+        new_lr = self.get_lr(base_lr, trainer.global_step, t_max)
+
+        # 3. STRICT OVERWRITE
+        if isinstance(current_lr := group.get(self.lr_field), torch.Tensor):
+            current_lr.fill_(new_lr)
+        else:
+            group[self.lr_field] = new_lr
+
+        return new_lr
 
 
 @Scheduler.register("half_cos_with_warmup")
