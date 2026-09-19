@@ -133,7 +133,7 @@ class MSLambdaScheduler(Scheduler):
             raw_lr = group.get(self.lr_field)
             # Extract pure float to sever the memory link to the live PyTorch tensor
             safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else raw_lr # 👈🏻 fix the _base_lr death spiralling bug
-            self._base_lrs.append(group.get(self.lr_field))
+            self._base_lrs.append(safe_lr)                   # ✅ Appending the extracted float! 🤦‍♀️
 
             
         # Cycle through the recorded pristine base LRs safely
