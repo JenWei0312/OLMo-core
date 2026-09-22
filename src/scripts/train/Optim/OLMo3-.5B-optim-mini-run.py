@@ -526,11 +526,10 @@ if __name__ == "__main__":
     # ==========================================
     RUN_TYPE       = "debug"         # "integration" (20 steps) | "debug" (400 steps) | "production" (5B tokens)
     MODEL_TYPE     = "dense_base"   # "dense_base" | "engram_attn" | "engram_gdn"
-    OPTIMIZER_TYPE = "adamw"         # "adamw" | "muon" | "dion"| "dion3"
+    OPTIMIZER_TYPE = "muon"         # "adamw" | "muon" | "dion"| "dion3"
 
     # 1. Resolve duration profile
     profile = build_train_profile(RUN_TYPE)
-
     # 2. Build unique descriptive experiment identifier
     run_name = f"olmo3-500m-{MODEL_TYPE}-{OPTIMIZER_TYPE}-{RUN_TYPE}"
     
