@@ -142,11 +142,11 @@ PROFILES: dict[str, TrainProfile] = {
         max_duration=Duration.steps(20),
     ),
     "debug": TrainProfile(
-        warmup_steps=20,
-        metrics_interval=10,
+        warmup_steps=40,
+        metrics_interval=20,
         eval_interval=100,
         eval_on_finish=True,
-        max_duration=Duration.steps(200),
+        max_duration=Duration.steps(400),
     ),
     "production": TrainProfile(
         warmup_steps=100,
@@ -524,9 +524,9 @@ if __name__ == "__main__":
     # ==========================================
     # 🎛️ THE 3 EXPERIMENT KNOBS
     # ==========================================
-    RUN_TYPE       = "integration"         # "integration" (20 steps) | "debug" (200 steps) | "production" (5B tokens)
+    RUN_TYPE       = "debug"         # "integration" (20 steps) | "debug" (400 steps) | "production" (5B tokens)
     MODEL_TYPE     = "dense_base"   # "dense_base" | "engram_attn" | "engram_gdn"
-    OPTIMIZER_TYPE = "muon"         # "adamw" | "muon" | "dion"| "dion3"
+    OPTIMIZER_TYPE = "adamw"         # "adamw" | "muon" | "dion"| "dion3"
 
     # 1. Resolve duration profile
     profile = build_train_profile(RUN_TYPE)
