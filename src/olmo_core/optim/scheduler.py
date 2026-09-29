@@ -43,7 +43,7 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
         """
         raise NotImplementedError
     
-def set_lr(self, group: Dict[str, Any], trainer: "Trainer") -> Union[float, torch.Tensor]:
+    def set_lr(self, group: Dict[str, Any], trainer: "Trainer") -> Union[float, torch.Tensor]:
         """
         Set the learning rate on an optimizer param group given a trainer's state.
         Fortified with dynamic group counting and tensor severing to survive ZeRO-1.
