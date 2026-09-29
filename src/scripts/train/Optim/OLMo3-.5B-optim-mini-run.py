@@ -319,7 +319,7 @@ def build_model_config(
 # ==========================================
 BASE_LR = 1e-3
 BASE_WD = 0.01
-DION_FRACTION = 0.25
+DION3_FRACTION = 0.25
 ADJUST_LR = "rms_norm"
 
 # ==========================================
@@ -346,9 +346,9 @@ def build_dion() -> OptimConfig:
 
 def build_dion3() -> OptimConfig:
     return Dion3Config(
-        lr = BASE_LR / math.sqrt(DION_FRACTION),
+        lr = BASE_LR / math.sqrt(DION3_FRACTION),
         weight_decay = BASE_WD,
-        fraction = DION_FRACTION,
+        fraction = DION3_FRACTION,
         adjust_lr = ADJUST_LR,
     )
 
@@ -524,7 +524,7 @@ if __name__ == "__main__":
     # ==========================================
     # 🎛️ THE 3 EXPERIMENT KNOBS
     # ==========================================
-    RUN_TYPE       = "debug"         # "integration" (20 steps) | "debug" (400 steps) | "production" (5B tokens)
+    RUN_TYPE       = "integration"         # "integration" (20 steps) | "debug" (400 steps) | "production" (5B tokens)
     MODEL_TYPE     = "dense_base"   # "dense_base" | "engram_attn" | "engram_gdn"
     OPTIMIZER_TYPE = "dion3"         # "adamw" | "muon" | "dion"| "dion3"
 
