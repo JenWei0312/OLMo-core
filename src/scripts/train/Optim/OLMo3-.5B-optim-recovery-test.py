@@ -481,8 +481,8 @@ def build_trainer_config(
                 # faster per step than traditional AdamW. Saving a permanent checkpoint every 500 steps 
                 # and maintaining an ephemeral sliding snapshot backup every 100 steps ensures you 
                 # capture the fast convergence dynamics without burning local disk storage overheads.
-                save_interval=200,               
-                ephemeral_save_interval=100,     
+                save_interval=20,               
+                ephemeral_save_interval=10,     
                 enabled=True,                    
                 pre_train_checkpoint=False, 
                 save_async=False,                 # Turn off for simulation training crush
