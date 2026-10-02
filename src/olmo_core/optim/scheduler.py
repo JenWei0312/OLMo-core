@@ -57,9 +57,15 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
 
         # 2. BULLETPROOF CAPTURE & TENSOR SEVERING
         if trainer.global_step == self._record_step:
-            raw_lr = group.get(self.lr_field)
+            # 🛑 RESUME TRAP FIX: Prioritize the pristine base rate saved in the checkpoint!
+            # If resuming, initial_lr exists. If it's a fresh run, fall back to lr.
+            raw_lr = group.get(self.initial_lr_field)
+            if raw_lr is None:
+                raw_lr = group.get(self.lr_field)
+                
             if raw_lr is None:
                 raise RuntimeError(f"learning rate field '{self.lr_field}' not found in param group.")
+            
             # Extract pure float to sever the memory link to the live PyTorch tensor
             safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else raw_lr
             self._base_lrs.append(safe_lr)

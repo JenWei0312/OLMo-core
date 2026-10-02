@@ -485,7 +485,7 @@ def build_trainer_config(
                 ephemeral_save_interval=10,     
                 enabled=True,                    
                 pre_train_checkpoint=False, 
-                save_async=False,                 # Turn off for simulation training crush
+                save_async=False,                 # Turn off for simulating training crush
             ),
         )
         .with_callback(
