@@ -245,10 +245,32 @@ class Dion3Config(DionConfig):
             dist_mesh = None
 
 
-    
         # 5. Build optimizer with explicit keyword argument
-        return self.optimizer()(
+        optim = self.optimizer()(
             self.build_groups(model, strict=strict),
             distributed_mesh=dist_mesh,
             **kwargs,
         )
+
+        # 🛑 THE RESUME ANCHOR: CHECKPOINT INTERCEPTOR
+        # 1. Snapshot the true, config-scaled LRs before anything touches them
+        initial_lrs = []
+        for group in optim.param_groups:
+            raw_lr = group['lr']
+            initial_lrs.append(raw_lr.item() if isinstance(raw_lr, torch.Tensor) else float(raw_lr))
+            
+        # 2. Inject them for fresh runs
+        for group, init_lr in zip(optim.param_groups, initial_lrs):
+            group['pristine_lr'] = init_lr
+
+        # 3. Intercept load_state_dict to re-inject after a checkpoint overwrite
+        original_load_state_dict = optim.load_state_dict
+        def patched_load_state_dict(state_dict):
+            original_load_state_dict(state_dict)
+            # The bulldozer just wiped param_groups. Re-stamp the indestructible anchors!
+            for group, init_lr in zip(optim.param_groups, initial_lrs):
+                group['pristine_lr'] = init_lr
+                
+        optim.load_state_dict = patched_load_state_dict
+
+        return optim
