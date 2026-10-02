@@ -46,10 +46,9 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
     def set_lr(self, group: Dict[str, Any], trainer: "Trainer") -> Union[float, torch.Tensor]:
         """
         Set the learning rate on an optimizer param group given a trainer's state.
-        Fortified with dynamic group counting and tensor severing to survive ZeRO-1.
+        Fortified with dynamic group counting, tensor severing, and pristine checkpoint recovery.
         """
         # 1. INITIALIZE THE VAULT
-        # We initialize it dynamically here so we don't have to rewrite __post_init__ for every child class
         if getattr(self, "_record_step", None) is None:
             self._base_lrs = []
             self._call_idx = 0
@@ -57,26 +56,22 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
 
         # 2. BULLETPROOF CAPTURE & TENSOR SEVERING
         if trainer.global_step == self._record_step:
-            raw_lr = group.get(self.initial_lr_field)
+            # 🛑 RESUME TRAP FIX: Grab the indestructible config anchor first!
+            raw_lr = group.get("pristine_lr")
             
+            # Fallbacks for legacy checkpoints or AdamW groups
             if raw_lr is None:
-                # FSDP stripped initial_lr from the checkpoint. 
+                raw_lr = group.get(self.initial_lr_field)
+                print('group.get(self.initial_lr_field)=', raw_lr)
+            if raw_lr is None:
                 raw_lr = group.get(self.lr_field)
-                safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else raw_lr
+                print('group.get(self.lr_field)=', raw_lr)
                 
-                # If resuming mid-training (global_step > 1), raw_lr is the ALREADY DECAYED rate.
-                # We mathematically reverse the decay to perfectly recover the pristine base rate.
-                if trainer.global_step > 1:
-                    if self.units == SchedulerUnits.steps:
-                        multiplier = self.get_lr(1.0, trainer.global_step, trainer.max_steps)
-                    elif self.units == SchedulerUnits.tokens:
-                        multiplier = self.get_lr(1.0, trainer.global_train_tokens_seen, trainer.max_tokens)
-                        
-                    if multiplier > 1e-8:
-                        safe_lr = safe_lr / multiplier
-            else:
-                safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else raw_lr
+            if raw_lr is None:
+                raise RuntimeError(f"learning rate field '{self.lr_field}' not found in param group.")
                 
+            # Extract pure float to sever the memory link to the live PyTorch tensor
+            safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else float(raw_lr)
             self._base_lrs.append(safe_lr)
 
         # 3. FLAWLESS CYCLING
@@ -109,7 +104,6 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
             group[self.lr_field] = new_lr
 
         return new_lr
-
 
 #---- Mimicing MS scheduler
 from typing import Any, Union, Dict, Optional
