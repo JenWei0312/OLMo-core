@@ -57,17 +57,26 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
 
         # 2. BULLETPROOF CAPTURE & TENSOR SEVERING
         if trainer.global_step == self._record_step:
-            # 🛑 RESUME TRAP FIX: Prioritize the pristine base rate saved in the checkpoint!
-            # If resuming, initial_lr exists. If it's a fresh run, fall back to lr.
             raw_lr = group.get(self.initial_lr_field)
-            if raw_lr is None:
-                raw_lr = group.get(self.lr_field)
-                
-            if raw_lr is None:
-                raise RuntimeError(f"learning rate field '{self.lr_field}' not found in param group.")
             
-            # Extract pure float to sever the memory link to the live PyTorch tensor
-            safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else raw_lr
+            if raw_lr is None:
+                # FSDP stripped initial_lr from the checkpoint. 
+                raw_lr = group.get(self.lr_field)
+                safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else raw_lr
+                
+                # If resuming mid-training (global_step > 1), raw_lr is the ALREADY DECAYED rate.
+                # We mathematically reverse the decay to perfectly recover the pristine base rate.
+                if trainer.global_step > 1:
+                    if self.units == SchedulerUnits.steps:
+                        multiplier = self.get_lr(1.0, trainer.global_step, trainer.max_steps)
+                    elif self.units == SchedulerUnits.tokens:
+                        multiplier = self.get_lr(1.0, trainer.global_train_tokens_seen, trainer.max_tokens)
+                        
+                    if multiplier > 1e-8:
+                        safe_lr = safe_lr / multiplier
+            else:
+                safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else raw_lr
+                
             self._base_lrs.append(safe_lr)
 
         # 3. FLAWLESS CYCLING
