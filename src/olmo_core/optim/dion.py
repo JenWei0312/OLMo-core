@@ -263,13 +263,21 @@ class Dion3Config(DionConfig):
         for group, init_lr in zip(optim.param_groups, initial_lrs):
             group['pristine_lr'] = init_lr
 
-        # 3. Intercept load_state_dict to re-inject after a checkpoint overwrite
+        # 3. Intercept load_state_dict to safely smuggle the custom keys past DCP
         original_load_state_dict = optim.load_state_dict
-        def patched_load_state_dict(state_dict):
-            original_load_state_dict(state_dict)
-            # The bulldozer just wiped param_groups. Re-stamp the indestructible anchors!
+        def patched_load_state_dict(*args, **kwargs):
+            # A. HIDE: Temporarily remove the custom key so PyTorch DCP doesn't look for it on disk
+            for group in optim.param_groups:
+                group.pop('pristine_lr', None)
+                
+            # B. LOAD: Let the bulldozer safely overwrite the param_groups
+            result = original_load_state_dict(*args, **kwargs)
+            
+            # C. RESTORE: Re-stamp the indestructible anchors onto the freshly loaded groups
             for group, init_lr in zip(optim.param_groups, initial_lrs):
                 group['pristine_lr'] = init_lr
+                
+            return result
                 
         optim.load_state_dict = patched_load_state_dict
 
