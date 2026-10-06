@@ -1,3 +1,14 @@
+# Patch torch.compiler.disable before olmo_core imports execute
+import torch
+if hasattr(torch, "compiler") and hasattr(torch.compiler, "disable"):
+    original_disable = torch.compiler.disable
+
+    def patched_disable(*args, **kwargs):
+        kwargs.pop("reason", None)
+        return original_disable(*args, **kwargs)
+
+    torch.compiler.disable = patched_disable  # type: ignore[assignment]
+
 from typing import Any, cast
 import pytest
 import tempfile
@@ -15,15 +26,7 @@ from olmo_core.testing.utils import requires_dion
 from olmo_core.train import Trainer
 from olmo_core.utils import seed_all
 
-# Patch torch.compiler.disable before olmo_core imports execute
-if hasattr(torch, "compiler") and hasattr(torch.compiler, "disable"):
-    original_disable = torch.compiler.disable
 
-    def patched_disable(*args, **kwargs):
-        kwargs.pop("reason", None)
-        return original_disable(*args, **kwargs)
-
-    torch.compiler.disable = patched_disable  # type: ignore[assignment]
 
 class _FakeTrainer:
     """Minimal stand-in for Trainer, just enough for scheduler.set_lr."""
