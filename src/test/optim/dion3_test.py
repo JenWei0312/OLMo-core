@@ -86,13 +86,12 @@ def test_dion3_lr_vault_continuity(device: torch.device):
 
 
 # =====================================================================
-# 3. Distributed Integration Test: HSDP Module Recovery (Real Pipeline)
+# 3. Distributed Integration Test: HSDP + DCP Resumption
 # =====================================================================
 def _run_hsdp_train_module_recovery(shard_degree: int, num_replicas: int):
     device = get_default_device()
     seed_all(0)
 
-    # 1. Standard HSDP DataParallel Config matching actual training
     dp_config = TransformerDataParallelConfig(
         name=DataParallelType.hsdp,
         shard_degree=shard_degree,
@@ -101,69 +100,67 @@ def _run_hsdp_train_module_recovery(shard_degree: int, num_replicas: int):
         reduce_dtype=DType.bfloat16,
         wrapping_strategy=TransformerDataParallelWrappingStrategy.blocks,
     )
+    # Build world mesh ONCE per distributed worker process
     world_mesh = build_world_mesh(dp=dp_config, device_type=device.type)
 
     model_config = TransformerConfig.olmo2_30M(vocab_size=1024, n_layers=2)
 
-    def create_module():
-        train_module_cfg = TransformerTrainModuleConfig(
-            rank_microbatch_size=16,  # use tokem not batch size
-            max_sequence_length=8,
-            optim=Dion3Config(fraction=0.25, adjust_lr="rms_norm"),
-            compile_model=False,  # Keep test execution immediate without graph wait
-            dp_config=dp_config,
-            scheduler=CosWithWarmup(warmup_steps=5),
-        )
+    def build_and_wrap():
         model = model_config.build(init_device=device.type).train()
-        train_module = train_module_cfg.build(model)
-        return train_module
+        model = parallelize_model(
+            model, world_mesh=world_mesh, device=device, dp_config=dp_config
+        )
+        optim_cfg = Dion3Config(fraction=0.25, adjust_lr="rms_norm")
+        optim = optim_cfg.create_optimizer(model)
+        return model, optim
+
+    scheduler = CosWithWarmup(warmup_steps=5)
 
     # --- Run A: Uninterrupted Baseline ---
-    train_module_a = create_module()
+    seed_all(0)
+    model_a, optim_a = build_and_wrap()
     baseline_lrs = []
-    
     for step in range(20):
-        train_module_a.optim.zero_grad(set_to_none=True)
+        optim_a.zero_grad(set_to_none=True)
         batch = torch.randint(0, 1024, (2, 8), device=device)
-        train_module_a.model(batch).sum().backward()
-        for group in train_module_a.optim.param_groups:
-            lr = train_module_a.scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
+        model_a(batch).sum().backward()
+        for group in optim_a.param_groups:
+            lr = scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
             baseline_lrs.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
-        train_module_a.optim.step()
+        optim_a.step()
 
     # --- Run B: Checkpointed & Resumed Run ---
     seed_all(0)
-    train_module_b = create_module()
+    model_b, optim_b = build_and_wrap()
     lrs_resumed = []
 
     for step in range(10):
-        train_module_b.optim.zero_grad(set_to_none=True)
+        optim_b.zero_grad(set_to_none=True)
         batch = torch.randint(0, 1024, (2, 8), device=device)
-        train_module_b.model(batch).sum().backward()
-        for group in train_module_b.optim.param_groups:
-            lr = train_module_b.scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
+        model_b(batch).sum().backward()
+        for group in optim_b.param_groups:
+            lr = scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
             lrs_resumed.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
-        train_module_b.optim.step()
+        optim_b.step()
 
-    # Save & Reload via distributed checkpoint
+    # Save & Reload via distributed checkpoint (tests DCP schema matching + pristine_lr)
     with tempfile.TemporaryDirectory() as tmp_dir:
-        save_model_and_optim_state(tmp_dir, train_module_b.model, train_module_b.optim)
-        load_model_and_optim_state(tmp_dir, train_module_b.model, train_module_b.optim)
+        save_model_and_optim_state(tmp_dir, model_b, optim_b)
+        load_model_and_optim_state(tmp_dir, model_b, optim_b)
 
         for step in range(10, 20):
-            train_module_b.optim.zero_grad(set_to_none=True)
+            optim_b.zero_grad(set_to_none=True)
             batch = torch.randint(0, 1024, (2, 8), device=device)
-            train_module_b.model(batch).sum().backward()
-            for group in train_module_b.optim.param_groups:
-                lr = train_module_b.scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
+            model_b(batch).sum().backward()
+            for group in optim_b.param_groups:
+                lr = scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
                 lrs_resumed.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
-            train_module_b.optim.step()
+            optim_b.step()
 
     # Verify identical trajectories
     assert lrs_resumed == pytest.approx(baseline_lrs), (
         "Resumed learning rate trajectory diverged from uninterrupted run!"
     )
-
 
 @requires_dion
 @requires_multi_gpu
