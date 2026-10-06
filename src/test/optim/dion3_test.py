@@ -21,6 +21,7 @@ from olmo_core.train.train_module import (
     TransformerTrainModuleConfig,
 )
 from olmo_core.utils import get_default_device, seed_all
+from olmo_core.train.train_module.transformer.common import parallelize_model
 
 
 class _FakeTrainer:
