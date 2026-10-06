@@ -1,4 +1,5 @@
 from typing import Any, cast
+from packaging.version import parse as parse_version
 import pytest
 import tempfile
 import torch
@@ -15,13 +16,12 @@ from olmo_core.optim.scheduler import CosWithWarmup
 from olmo_core.testing import DEVICES, requires_multi_gpu, run_distributed_test
 from olmo_core.testing.utils import requires_dion
 from olmo_core.train import Trainer
-from olmo_core.train.train_module import (
+from olmo_core.train.train_module.transformer.common import parallelize_model
+from olmo_core.train.train_module.transformer.config import (
     TransformerDataParallelConfig,
     TransformerDataParallelWrappingStrategy,
-    TransformerTrainModuleConfig,
 )
 from olmo_core.utils import get_default_device, seed_all
-from olmo_core.train.train_module.transformer.common import parallelize_model
 
 
 class _FakeTrainer:
@@ -61,10 +61,6 @@ def test_dion3_config_builds():
 @requires_dion
 @pytest.mark.parametrize("device", DEVICES)
 def test_dion3_lr_vault_continuity(device: torch.device):
-    """
-    Verifies that the scheduler vault severs live GPU tensor references
-    and correctly prioritizes pristine_lr to avoid double-decay.
-    """
     seed_all(0)
     config = TransformerConfig.olmo2_30M(vocab_size=1024, n_layers=2)
     model = config.build().train().to(device)
@@ -81,27 +77,29 @@ def test_dion3_lr_vault_continuity(device: torch.device):
             lrs.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
         optim.step()
 
-    # The learning rate must follow warmup -> decay without NaN or flatline
     assert lrs[0] < lrs[5]
     assert lrs[5] > lrs[-1]
 
 
 # =====================================================================
-# 3. Distributed Integration Test: HSDP + DCP Resumption
+# 3. Distributed Integration Test Core
 # =====================================================================
-def _run_hsdp_train_module_recovery(shard_degree: int, num_replicas: int):
+def _run_distributed_dion3_recovery(dp_type: DataParallelType, shard_degree: int | None = None, num_replicas: int | None = None):
     device = get_default_device()
     seed_all(0)
 
-    dp_config = TransformerDataParallelConfig(
-        name=DataParallelType.hsdp,
-        shard_degree=shard_degree,
-        num_replicas=num_replicas,
-        param_dtype=DType.bfloat16,
-        reduce_dtype=DType.bfloat16,
-        wrapping_strategy=TransformerDataParallelWrappingStrategy.blocks,
-    )
-    # Build world mesh ONCE per distributed worker process
+    dp_kwargs: dict[str, Any] = {
+        "name": dp_type,
+        "param_dtype": DType.bfloat16,
+        "reduce_dtype": DType.bfloat16,
+        "wrapping_strategy": TransformerDataParallelWrappingStrategy.blocks,
+    }
+    if shard_degree is not None:
+        dp_kwargs["shard_degree"] = shard_degree
+    if num_replicas is not None:
+        dp_kwargs["num_replicas"] = num_replicas
+
+    dp_config = TransformerDataParallelConfig(**dp_kwargs)
     world_mesh = build_world_mesh(dp=dp_config, device_type=device.type)
 
     model_config = TransformerConfig.olmo2_30M(vocab_size=1024, n_layers=2)
@@ -144,7 +142,6 @@ def _run_hsdp_train_module_recovery(shard_degree: int, num_replicas: int):
             lrs_resumed.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
         optim_b.step()
 
-    # Save & Reload via distributed checkpoint (tests DCP schema matching + pristine_lr)
     with tempfile.TemporaryDirectory() as tmp_dir:
         save_model_and_optim_state(tmp_dir, model_b, optim_b)
         load_model_and_optim_state(tmp_dir, model_b, optim_b)
@@ -158,13 +155,31 @@ def _run_hsdp_train_module_recovery(shard_degree: int, num_replicas: int):
                 lrs_resumed.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
             optim_b.step()
 
-    # Verify identical trajectories
     assert lrs_resumed == pytest.approx(baseline_lrs), (
         "Resumed learning rate trajectory diverged from uninterrupted run!"
     )
 
+
+# --- 3a. FSDP Recovery Test (Runs on PyTorch >= 2.13) ---
 @requires_dion
 @requires_multi_gpu
+def test_fsdp_dion3_recovery():
+    seed_all(0)
+    run_distributed_test(
+        _run_distributed_dion3_recovery,
+        backend="nccl",
+        world_size=2,
+        func_args=(DataParallelType.fsdp,),
+    )
+
+
+# --- 3b. HSDP Recovery Test (Matches AI2 dion_test.py skipif convention) ---
+@requires_dion
+@requires_multi_gpu
+@pytest.mark.skipif(
+    parse_version(torch.__version__) >= parse_version("2.13"),
+    reason="dion HSDP is broken on torch>=2.13 (CPU-tensor Triton error + flaky ALLREDUCE hang)",
+)
 @pytest.mark.parametrize(
     "shard_degree,num_replicas",
     [
@@ -172,11 +187,11 @@ def _run_hsdp_train_module_recovery(shard_degree: int, num_replicas: int):
         pytest.param(1, 2, id="shard1_replica2"),
     ],
 )
-def test_hsdp_dion3_module_recovery(shard_degree: int, num_replicas: int):
+def test_hsdp_dion3_recovery(shard_degree: int, num_replicas: int):
     seed_all(0)
     run_distributed_test(
-        _run_hsdp_train_module_recovery,
+        _run_distributed_dion3_recovery,
         backend="nccl",
         world_size=2,
-        func_args=(shard_degree, num_replicas),
+        func_args=(DataParallelType.hsdp, shard_degree, num_replicas),
     )
