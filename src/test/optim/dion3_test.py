@@ -107,7 +107,7 @@ def _run_hsdp_train_module_recovery(shard_degree: int, num_replicas: int):
 
     def create_module():
         train_module_cfg = TransformerTrainModuleConfig(
-            rank_microbatch_size=2,
+            rank_microbatch_size=16,  # use tokem not batch size
             max_sequence_length=8,
             optim=Dion3Config(fraction=0.25, adjust_lr="rms_norm"),
             compile_model=False,  # Keep test execution immediate without graph wait
