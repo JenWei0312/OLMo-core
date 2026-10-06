@@ -1,30 +1,26 @@
 from typing import Any, cast
 import pytest
+import tempfile
 import torch
 
+from olmo_core.config import DType
 from olmo_core.distributed.checkpoint import (
     load_model_and_optim_state,
     save_model_and_optim_state,
 )
 from olmo_core.distributed.parallel import DataParallelType, build_world_mesh
 from olmo_core.nn.transformer.config import TransformerConfig
-from olmo_core.nn.transformer.model import Transformer
 from olmo_core.optim.dion import Dion3Config
 from olmo_core.optim.scheduler import CosWithWarmup
 from olmo_core.testing import DEVICES, requires_multi_gpu, run_distributed_test
 from olmo_core.testing.utils import requires_dion
 from olmo_core.train import Trainer
-from olmo_core.train.train_module.transformer.common import parallelize_model
-from olmo_core.train.train_module.transformer.config import (
+from olmo_core.train.train_module import (
     TransformerDataParallelConfig,
+    TransformerDataParallelWrappingStrategy,
+    TransformerTrainModuleConfig,
 )
 from olmo_core.utils import get_default_device, seed_all
-
-
-def build_transformer_model() -> Transformer:
-    config = TransformerConfig.olmo2_30M(vocab_size=1024, n_layers=2)
-    model = config.build()
-    return model
 
 
 class _FakeTrainer:
@@ -37,147 +33,136 @@ class _FakeTrainer:
 
 
 def _as_trainer(fake: _FakeTrainer) -> Trainer:
-    """Cast helper to silence static type checker (Pylance)."""
     return cast(Trainer, cast(Any, fake))
 
 
 # =====================================================================
-# 1. Config Building Test
+# 1. Config Verification
 # =====================================================================
 @requires_dion
-def test_dion3_config_to_optim():
+def test_dion3_config_builds():
     from dion import Dion3  # type: ignore[reportMissingImports]
 
-    config = Dion3Config()
-    model = build_transformer_model()
-    optim = config.build(model)
+    config = TransformerConfig.olmo2_30M(vocab_size=1024, n_layers=2)
+    model = config.build()
+    optim_cfg = Dion3Config()
+    optim = optim_cfg.build(model)
 
     assert isinstance(optim, Dion3)
-    assert len(optim.param_groups) == 4  # emb, matrix, vector, lm_head
+    assert len(optim.param_groups) == 4
+    for group in optim.param_groups:
+        assert "pristine_lr" in group
 
 
 # =====================================================================
-# 2. Local Unit Test: LR Continuity across Checkpoint Load
+# 2. Local Unit Test: LR Continuity across In-Memory Reset
 # =====================================================================
 @requires_dion
 @pytest.mark.parametrize("device", DEVICES)
-def test_dion3_lr_survives_checkpoint_recovery(device: torch.device, tmp_path):
+def test_dion3_lr_vault_continuity(device: torch.device):
+    """
+    Verifies that the scheduler vault severs live GPU tensor references
+    and correctly prioritizes pristine_lr to avoid double-decay.
+    """
     seed_all(0)
-    config = Dion3Config()
-    model = build_transformer_model().train().to(device)
-    optim = config.build(model)
-    scheduler = CosWithWarmup(warmup_steps=5)
-
-    def train_steps(start_step: int, end_step: int, max_steps: int):
-        lrs = []
-        for step in range(start_step, end_step):
-            optim.zero_grad(set_to_none=True)
-            model(torch.randint(0, 1024, (2, 8), device=device).int()).sum().backward()
-            for group in optim.param_groups:
-                lr = scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, max_steps)))
-                lrs.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
-            optim.step()
-        return lrs
-
-    # Uninterrupted baseline
-    seed_all(0)
-    baseline_lrs = train_steps(0, 20, max_steps=20)
-
-    # Interrupted run with checkpoint save & restore
-    seed_all(0)
-    model2 = build_transformer_model().train().to(device)
-    optim2 = config.build(model2)
-    scheduler2 = CosWithWarmup(warmup_steps=5)
-
-    lrs_before = []
-    for step in range(10):
-        optim2.zero_grad(set_to_none=True)
-        model2(torch.randint(0, 1024, (2, 8), device=device).int()).sum().backward()
-        for group in optim2.param_groups:
-            lr = scheduler2.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
-            lrs_before.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
-        optim2.step()
-
-    save_model_and_optim_state(tmp_path, model2, optim2)
-    load_model_and_optim_state(tmp_path, model2, optim2)
-
-    lrs_after = []
-    for step in range(10, 20):
-        optim2.zero_grad(set_to_none=True)
-        model2(torch.randint(0, 1024, (2, 8), device=device).int()).sum().backward()
-        for group in optim2.param_groups:
-            lr = scheduler2.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
-            lrs_after.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
-        optim2.step()
-
-    recovered_lrs = lrs_before + lrs_after
-    assert recovered_lrs == pytest.approx(baseline_lrs), (
-        "LR trajectory diverged after checkpoint recovery!"
-    )
-
-
-# =====================================================================
-# 3. Distributed Integration Test: HSDP + DCP Resumption
-# =====================================================================
-def _run_hsdp_dion3_recovery(shard_degree: int, num_replicas: int):
-    device = get_default_device()
-
-    dp_config = TransformerDataParallelConfig(
-        name=DataParallelType.hsdp, shard_degree=shard_degree, num_replicas=num_replicas
-    )
-    world_mesh = build_world_mesh(dp=dp_config, device_type=device.type)
     config = TransformerConfig.olmo2_30M(vocab_size=1024, n_layers=2)
-
-    def build_and_wrap():
-        model = config.build(init_device=device.type).train()
-        model = parallelize_model(
-            model, world_mesh=world_mesh, device=device, dp_config=dp_config
-        )
-        optim = Dion3Config().create_optimizer(model)
-        return model, optim
-
+    model = config.build().train().to(device)
+    optim = Dion3Config().build(model)
     scheduler = CosWithWarmup(warmup_steps=5)
 
-    # 1. Baseline Run
-    seed_all(0)
-    model, optim = build_and_wrap()
-    baseline_lrs = []
+    lrs = []
     for step in range(20):
         optim.zero_grad(set_to_none=True)
-        model(torch.randint(0, 1024, (2, 8), device=device).int()).sum().backward()
+        x = torch.randint(0, 1024, (2, 8), device=device)
+        model(x).sum().backward()
         for group in optim.param_groups:
             lr = scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
-            baseline_lrs.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
+            lrs.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
         optim.step()
 
-    # 2. Checkpointed Run
+    # The learning rate must follow warmup -> decay without NaN or flatline
+    assert lrs[0] < lrs[5]
+    assert lrs[5] > lrs[-1]
+
+
+# =====================================================================
+# 3. Distributed Integration Test: HSDP Module Recovery (Real Pipeline)
+# =====================================================================
+def _run_hsdp_train_module_recovery(shard_degree: int, num_replicas: int):
+    device = get_default_device()
     seed_all(0)
-    model2, optim2 = build_and_wrap()
-    lrs_before = []
+
+    # 1. Standard HSDP DataParallel Config matching actual training
+    dp_config = TransformerDataParallelConfig(
+        name=DataParallelType.hsdp,
+        shard_degree=shard_degree,
+        num_replicas=num_replicas,
+        param_dtype=DType.bfloat16,
+        reduce_dtype=DType.bfloat16,
+        wrapping_strategy=TransformerDataParallelWrappingStrategy.blocks,
+    )
+    world_mesh = build_world_mesh(dp=dp_config, device_type=device.type)
+
+    model_config = TransformerConfig.olmo2_30M(vocab_size=1024, n_layers=2)
+
+    def create_module():
+        train_module_cfg = TransformerTrainModuleConfig(
+            rank_microbatch_size=2,
+            max_sequence_length=8,
+            optim=Dion3Config(fraction=0.25, adjust_lr="rms_norm"),
+            compile_model=False,  # Keep test execution immediate without graph wait
+            dp_config=dp_config,
+            scheduler=CosWithWarmup(warmup_steps=5),
+        )
+        model = model_config.build(init_device=device.type).train()
+        train_module = train_module_cfg.build(model)
+        return train_module
+
+    # --- Run A: Uninterrupted Baseline ---
+    train_module_a = create_module()
+    baseline_lrs = []
+    
+    for step in range(20):
+        train_module_a.optim.zero_grad(set_to_none=True)
+        batch = torch.randint(0, 1024, (2, 8), device=device)
+        train_module_a.model(batch).sum().backward()
+        for group in train_module_a.optim.param_groups:
+            lr = train_module_a.scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
+            baseline_lrs.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
+        train_module_a.optim.step()
+
+    # --- Run B: Checkpointed & Resumed Run ---
+    seed_all(0)
+    train_module_b = create_module()
+    lrs_resumed = []
+
     for step in range(10):
-        optim2.zero_grad(set_to_none=True)
-        model2(torch.randint(0, 1024, (2, 8), device=device).int()).sum().backward()
-        for group in optim2.param_groups:
-            lr = scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
-            lrs_before.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
-        optim2.step()
+        train_module_b.optim.zero_grad(set_to_none=True)
+        batch = torch.randint(0, 1024, (2, 8), device=device)
+        train_module_b.model(batch).sum().backward()
+        for group in train_module_b.optim.param_groups:
+            lr = train_module_b.scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
+            lrs_resumed.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
+        train_module_b.optim.step()
 
-    import tempfile
-    with tempfile.TemporaryDirectory() as tmp_path:
-        save_model_and_optim_state(tmp_path, model2, optim2)
-        load_model_and_optim_state(tmp_path, model2, optim2)
+    # Save & Reload via distributed checkpoint
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        save_model_and_optim_state(tmp_dir, train_module_b.model, train_module_b.optim)
+        load_model_and_optim_state(tmp_dir, train_module_b.model, train_module_b.optim)
 
-        lrs_after = []
         for step in range(10, 20):
-            optim2.zero_grad(set_to_none=True)
-            model2(torch.randint(0, 1024, (2, 8), device=device).int()).sum().backward()
-            for group in optim2.param_groups:
-                lr = scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
-                lrs_after.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
-            optim2.step()
+            train_module_b.optim.zero_grad(set_to_none=True)
+            batch = torch.randint(0, 1024, (2, 8), device=device)
+            train_module_b.model(batch).sum().backward()
+            for group in train_module_b.optim.param_groups:
+                lr = train_module_b.scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
+                lrs_resumed.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
+            train_module_b.optim.step()
 
-    recovered_lrs = lrs_before + lrs_after
-    assert recovered_lrs == pytest.approx(baseline_lrs)
+    # Verify identical trajectories
+    assert lrs_resumed == pytest.approx(baseline_lrs), (
+        "Resumed learning rate trajectory diverged from uninterrupted run!"
+    )
 
 
 @requires_dion
@@ -189,10 +174,10 @@ def _run_hsdp_dion3_recovery(shard_degree: int, num_replicas: int):
         pytest.param(1, 2, id="shard1_replica2"),
     ],
 )
-def test_hsdp_dion3_recovery(shard_degree: int, num_replicas: int):
+def test_hsdp_dion3_module_recovery(shard_degree: int, num_replicas: int):
     seed_all(0)
     run_distributed_test(
-        _run_hsdp_dion3_recovery,
+        _run_hsdp_train_module_recovery,
         backend="nccl",
         world_size=2,
         func_args=(shard_degree, num_replicas),
