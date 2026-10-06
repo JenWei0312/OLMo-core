@@ -23,10 +23,6 @@ def _warn_rank0(message: str, category: type[Warning], *, stacklevel: int = 1) -
     if get_rank() == 0:
         warnings.warn(message, category, stacklevel=stacklevel + 1)
 
-def _warn_rank0(message: str, category: type[Warning], *, stacklevel: int = 1) -> None:
-    if get_rank() == 0:
-        warnings.warn(message, category, stacklevel=stacklevel + 1)
-
 
 class SchedulerUnits(StrEnum):
     steps = "steps"
