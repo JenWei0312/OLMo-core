@@ -60,58 +60,65 @@ def test_dion3_config_builds():
 
 
 # =====================================================================
-# 2. LR Continuity Across Checkpoint Save/Load
+# 2. LR Continuity Across Checkpoint Save/Load (Cold Start)
 # =====================================================================
 @requires_dion
 @pytest.mark.parametrize("device", DEVICES)
 def test_dion3_lr_survives_checkpoint_recovery(device: torch.device):
     seed_all(0)
     model_config = TransformerConfig.olmo2_30M(vocab_size=1024, n_layers=2)
-    scheduler = CosWithWarmup(warmup=5)
 
     def build():
         model = model_config.build().train().to(device)
         optim = Dion3Config().build(model)
-        return model, optim
+        scheduler = CosWithWarmup(warmup_steps=5)
+        return model, optim, scheduler
 
-    # Baseline: uninterrupted run.
+    # --- Run A: Uninterrupted Baseline ---
     seed_all(0)
-    model_a, optim_a = build()
+    model_a, optim_a, scheduler_a = build()
     baseline_lrs = []
     for step in range(20):
         optim_a.zero_grad(set_to_none=True)
         model_a(torch.randint(0, 1024, (2, 8), device=device)).sum().backward()
         for group in optim_a.param_groups:
-            lr = scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
+            lr = scheduler_a.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
             baseline_lrs.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
         optim_a.step()
 
-    # Recovery: train partway, checkpoint, reload, continue — should match baseline.
+    # --- Run B: Train & Save Checkpoint ---
     seed_all(0)
-    model_b, optim_b = build()
+    model_b, optim_b, scheduler_b = build()
     lrs_resumed = []
     for step in range(10):
         optim_b.zero_grad(set_to_none=True)
         model_b(torch.randint(0, 1024, (2, 8), device=device)).sum().backward()
         for group in optim_b.param_groups:
-            lr = scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
+            lr = scheduler_b.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
             lrs_resumed.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
         optim_b.step()
 
     with tempfile.TemporaryDirectory() as tmp_dir:
+        # Save the decayed mid-run state to disk
         save_model_and_optim_state(tmp_dir, model_b, optim_b)
-        load_model_and_optim_state(tmp_dir, model_b, optim_b)
+
+        # --- Run C: True Cold Start Resumption ---
+        # Create fresh objects from the config, exactly like a new torchrun command
+        seed_all(0)
+        model_c, optim_c, scheduler_c = build()
+
+        # Merge the decayed disk state over the pristine config dictionaries
+        load_model_and_optim_state(tmp_dir, model_c, optim_c)
 
         for step in range(10, 20):
-            optim_b.zero_grad(set_to_none=True)
-            model_b(torch.randint(0, 1024, (2, 8), device=device)).sum().backward()
-            for group in optim_b.param_groups:
-                lr = scheduler.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
+            optim_c.zero_grad(set_to_none=True)
+            model_c(torch.randint(0, 1024, (2, 8), device=device)).sum().backward()
+            for group in optim_c.param_groups:
+                lr = scheduler_c.set_lr(group, _as_trainer(_FakeTrainer(step, 20)))
                 lrs_resumed.append(lr.item() if isinstance(lr, torch.Tensor) else float(lr))
-            optim_b.step()
+            optim_c.step()
 
     assert lrs_resumed == pytest.approx(baseline_lrs), (
-        "Resumed LR trajectory diverged from uninterrupted run — see PR description "
-        "for why this matters (Dion3's lr is a live tensor with no Dion-equivalent "
-        "checkpoint protection)."
+        "Resumed LR trajectory diverged after a cold restart! The config's pristine_lr "
+        "was either overwritten by the decayed LR or wiped by the DCP schema merge."
     )
