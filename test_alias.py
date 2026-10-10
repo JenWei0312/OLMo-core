@@ -19,7 +19,14 @@ from src.olmo_core.distributed.checkpoint import (
 )
 from src.olmo_core.nn.transformer.config import TransformerConfig
 from src.olmo_core.optim.dion import Dion3Config
+from olmo_core.nn.transformer import Transformer
 
+m = TransformerConfig.olmo2_30M(vocab_size=1024, n_layers=2).build()
+print(type(m), type(m).__module__)
+print(Transformer, Transformer.__module__)
+print("same class:", type(m) is Transformer, "| isinstance:", isinstance(m, Transformer))
+import sys
+print([k for k in sys.modules if k.endswith("transformer.model")])
 
 def build():
     model = TransformerConfig.olmo2_30M(vocab_size=1024, n_layers=2).build().cuda()
