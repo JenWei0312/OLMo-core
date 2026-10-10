@@ -56,9 +56,10 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
 
         # 2. BULLETPROOF CAPTURE & TENSOR SEVERING
         if trainer.global_step == self._record_step:
+            print('trainer.global_step == self._record_step')
             # 🛑 RESUME TRAP FIX: Grab the indestructible config anchor first!
             raw_lr = group.get("pristine_lr")
-            
+            print('raw_lr=', raw_lr)
             # Fallbacks for legacy checkpoints or AdamW groups
             if raw_lr is None:
                 raw_lr = group.get(self.initial_lr_field)
