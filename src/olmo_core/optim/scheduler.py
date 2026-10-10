@@ -50,8 +50,8 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
         """
         # 0.Print out a few optimizaer state variables for debugging
         print("--- 🧐 debugging---")
-        print('group.get(self.initial_lr_field)=', 'group.get(self.initial_lr_field)=')
-        print('group.get(self.lr_field)=', 'group.get(self.lr_field)=','\n' )
+        print('group.get(self.initial_lr_field)=', group.get(self.initial_lr_field))
+        print('group.get(self.lr_field)=', group.get(self.lr_field),'\n' )
         
         # 1. INITIALIZE THE VAULT
         if getattr(self, "_record_step", None) is None:
