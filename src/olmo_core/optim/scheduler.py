@@ -46,64 +46,48 @@ class Scheduler(Config, Registrable, metaclass=ABCMeta):
     def set_lr(self, group: Dict[str, Any], trainer: "Trainer") -> Union[float, torch.Tensor]:
         """
         Set the learning rate on an optimizer param group given a trainer's state.
-        Fortified with dynamic group counting, tensor severing, and pristine checkpoint recovery.
         """
-        # 0.Print out a few optimizaer state variables for debugging
-        print("--- 🧐 debugging---")
-        print('group.get(self.initial_lr_field)=', group.get(self.initial_lr_field))
-        print('group.get(self.lr_field)=', group.get(self.lr_field),'\n' )
-        
-        # 1. INITIALIZE THE VAULT
-        if getattr(self, "_record_step", None) is None:
-            self._base_lrs = []
-            self._call_idx = 0
-            self._record_step = trainer.global_step
+        if (lr_field := self.lr_field) not in group and (
+            initial_lr_field := self.initial_lr_field
+        ) not in group:
+            group_fields_list = "\n - ".join(
+                [f"{k}: {v}" for k, v in group.items() if k != "params"]
+            )
+            raise RuntimeError(
+                f"learning rate field '{lr_field}' and initial learning rate field "
+                f"'{initial_lr_field}' not found in optimizer param group "
+                f"with {len(group['params'])} parameter(s):\n"
+                f" - {group_fields_list}"
+            )
 
-        # 2. BULLETPROOF CAPTURE & TENSOR SEVERING
-        if trainer.global_step == self._record_step:
-            print('trainer.global_step == self._record_step')
-            # 🛑 RESUME TRAP FIX: Grab the indestructible config anchor first!
-            raw_lr = group.get("pristine_lr")
-            print('raw_lr=', raw_lr)
-            # Fallbacks for legacy checkpoints or AdamW groups
-            if raw_lr is None:
-                raw_lr = group.get(self.initial_lr_field)
-                print('group.get(self.initial_lr_field)=', raw_lr)
-            if raw_lr is None:
-                raw_lr = group.get(self.lr_field)
-                print('group.get(self.lr_field)=', raw_lr)
-                
-            if raw_lr is None:
-                raise RuntimeError(f"learning rate field '{self.lr_field}' not found in param group.")
-                
-            # Extract pure float to sever the memory link to the live PyTorch tensor
-            safe_lr = raw_lr.item() if isinstance(raw_lr, torch.Tensor) else float(raw_lr)
-            self._base_lrs.append(safe_lr)
+        # Ensure 'initial_lr' is set.
+        if group.get(self.initial_lr_field) is None:
+            group[self.initial_lr_field] = group[self.lr_field]
 
-        # 3. FLAWLESS CYCLING
-        num_groups = len(self._base_lrs)
-        group_idx = self._call_idx % num_groups
-        base_lr = self._base_lrs[group_idx]
-        self._call_idx += 1
-
-        # Force the dictionary to hold the correct initial_lr for legacy compatibility
-        group[self.initial_lr_field] = base_lr
-
-        # 4. CALCULATE NEW LR (Supporting both Steps and Tokens!)
+        # Set new LR.
         if self.units == SchedulerUnits.steps:
             if trainer.max_steps is None:
-                raise OLMoConfigurationError("'max_steps' must be known for step-based scheduling.")
-            new_lr = self.get_lr(base_lr, trainer.global_step, trainer.max_steps)
-            
+                raise OLMoConfigurationError(
+                    "'max_steps' must be known in the trainer for step-based scheduling."
+                )
+            new_lr = self.get_lr(
+                group[self.initial_lr_field],
+                trainer.global_step,
+                trainer.max_steps,
+            )
         elif self.units == SchedulerUnits.tokens:
             if trainer.max_tokens is None:
-                raise OLMoConfigurationError("'max_tokens' must be known for token-based scheduling.")
-            new_lr = self.get_lr(base_lr, trainer.global_train_tokens_seen, trainer.max_tokens)
-            
+                raise OLMoConfigurationError(
+                    "'max_tokens' must be known in the trainer for token-based scheduling."
+                )
+            new_lr = self.get_lr(
+                group[self.initial_lr_field],
+                trainer.global_train_tokens_seen,
+                trainer.max_tokens,
+            )
         else:
             raise NotImplementedError(self.units)
 
-        # 5. STRICT OVERWRITE
         if isinstance(current_lr := group.get(self.lr_field), torch.Tensor):
             current_lr.fill_(new_lr)
         else:
