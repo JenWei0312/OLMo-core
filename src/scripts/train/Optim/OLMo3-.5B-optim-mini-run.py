@@ -391,12 +391,10 @@ def build_train_module_config(
             reduce_dtype=DType.bfloat16,
             wrapping_strategy=TransformerDataParallelWrappingStrategy.blocks,
         ),
-        float8_config=Float8Config(enabled=False),
+        float8_config=Float8Config(enabled=True),
         z_loss_multiplier=1e-5,
         max_grad_norm=1.0,
         scheduler=CosWithWarmup(warmup=profile.warmup_steps),
-        #scheduler = MSLambdaScheduler(), 
-        #scheduler = ConstantScheduler(),
     )
 
 # ==========================================
@@ -526,7 +524,7 @@ if __name__ == "__main__":
     # ==========================================
     RUN_TYPE       = "integration"         # "integration" (20 steps) | "debug" (400 steps) | "production" (5B tokens)
     MODEL_TYPE     = "dense_base"   # "dense_base" | "engram_attn" | "engram_gdn"
-    OPTIMIZER_TYPE = "dion"         # "adamw" | "muon" | "dion"| "dion3"
+    OPTIMIZER_TYPE = "dion3"         # "adamw" | "muon" | "dion"| "dion3"
 
     # 1. Resolve duration profile
     profile = build_train_profile(RUN_TYPE)
